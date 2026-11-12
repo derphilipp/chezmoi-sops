@@ -108,6 +108,17 @@ know.
 - The whole-file `age` format is supported too, for payloads that are not
   structured. It has no shape: without the key there is nothing to show.
 
+### The binary is large
+
+About 43 MB. That is the price of the sops library: its root package
+imports the key service, which pulls in the AWS, Google Cloud and Azure
+key-management SDKs, even though only age is used here.
+
+For comparison, the `sops` binary itself is about 50 MB and `chezmoi`
+about 41 MB, so the tool is in the same ballpark as the tools it sits
+between. Writing the sops file format by hand would avoid the SDKs, at
+the cost of a reimplementation that has to track the format exactly.
+
 ## Status
 
 Phases 1 and 2 are done: the group management commands and the data

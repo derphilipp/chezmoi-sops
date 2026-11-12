@@ -9,7 +9,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// version is the version of the tool, set at build time.
 var version = "dev"
+
+// SetVersion sets the version of the tool.
+func SetVersion(v string) {
+	if v == "" {
+		return
+	}
+	version = v
+	rootCmd.Version = v
+}
 
 // Global options, shared by every subcommand.
 var (
