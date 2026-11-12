@@ -159,11 +159,58 @@ provides the richer, group-aware alternative.
 cmd/chezmoi-sops/main.go      thin main: cobra root, no logic
 internal/
   cli/          cobra commands, one file per command
-  groups/       the group model: discovery, recipients registry, merge, flatten
+  access/       the access file: the machines and the groups
+  groups/       the layout: discovery, the merge, the flattening
   payload/      the two payload formats behind one interface
   keyring/      age identity discovery
   editor/       the decrypt → $EDITOR → encrypt round trip
+  chezmoi/      the chezmoi configuration the tool works with
 ```
+
+## The layout of the secrets
+
+```
+.secrets/
+  access.yaml                   the machines and the groups
+  groups/<group>/<file>        the payloads of a group
+  hosts/<host>/<file>          the payloads of one machine
+```
+
+```yaml
+# .secrets/access.yaml
+hosts:
+  laura:
+    age: [age1...]
+  leela:
+    age: [age1...]
+
+groups:
+  common: [laura, leela]
+  home: [laura]
+```
+
+The rules:
+
+- **The recipients of a group are derived from its members.** A key is only
+  ever written once, in the hosts section.
+- **The directory tree carries the access.** A file in `groups/<group>/` is
+  readable by the members of that group; a file in `hosts/<host>/` is
+  readable by that machine alone. Adding a secret is adding a file, with no
+  configuration change at all.
+- **The order of the groups in the access file is the merge order.** The
+  first group that holds a value wins, and the conflict is reported. The
+  file is read as an ordered document so the order is the order of the file,
+  not the order of a map.
+- **A group contributes its shape when it cannot be read**, so a template
+  renders empty values instead of failing. A host contributes no shape: its
+  secrets are for that machine alone, so their names belong to it alone.
+- **A directory without an entry in the access file is an error.** It would
+  either be readable by nobody or by everybody, and neither is ever meant.
+- **Every key belongs to a named machine.** A group cannot list a host that
+  does not exist, so a key cannot be left behind without an owner.
+- **The shared group is called `common`**, not `default`. The old `default`
+  group did two jobs: it was the recipient registry as well as a group. It
+  also sorts first, which keeps the merge order the same.
 
 ### Core types
 
