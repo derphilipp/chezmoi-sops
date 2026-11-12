@@ -43,6 +43,11 @@ func (c Config) SecretsDir() string {
 //   - "chezmoi data --format json" gives the effective configuration. It
 //     reads the *rendered* configuration file, not the template, so calling
 //     it from a template does not recurse.
+//
+// $CHEZMOI_SOURCE_DIR wins over both: chezmoi sets it before it runs a
+// template or a plugin, so a plugin sees the source directory of the
+// chezmoi invocation it belongs to, even when that invocation used
+// --source or --config.
 func Load() (Config, error) {
 	config := Config{}
 
@@ -65,6 +70,10 @@ func Load() (Config, error) {
 
 // sourcePath returns the chezmoi source directory.
 func sourcePath() (string, error) {
+	if dir := strings.TrimSpace(os.Getenv("CHEZMOI_SOURCE_DIR")); dir != "" {
+		return dir, nil
+	}
+
 	out, err := exec.Command("chezmoi", "source-path").Output()
 	if err != nil {
 		return "", fmt.Errorf("reading the chezmoi source directory: %w "+
@@ -92,10 +101,18 @@ type chezmoiData struct {
 }
 
 // data returns the effective chezmoi configuration.
+//
+// The source directory is passed explicitly, so the configuration of the
+// chezmoi invocation the tool belongs to is read, not the default one.
 func data() (chezmoiData, error) {
 	var parsed chezmoiData
 
-	out, err := exec.Command("chezmoi", "data", "--format", "json").Output()
+	args := []string{"data", "--format", "json"}
+	if sourceDir := strings.TrimSpace(os.Getenv("CHEZMOI_SOURCE_DIR")); sourceDir != "" {
+		args = append([]string{"--source", sourceDir}, args...)
+	}
+
+	out, err := exec.Command("chezmoi", args...).Output()
 	if err != nil {
 		return parsed, fmt.Errorf("reading the chezmoi configuration: %w", err)
 	}
