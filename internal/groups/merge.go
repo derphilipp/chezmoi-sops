@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/derphilipp/chezmoi-sops/internal/payload"
 )
 
 // Status describes what happened to one group.
@@ -148,8 +150,8 @@ func mergeTrees(dst, src map[string]any) map[string]any {
 			continue
 		}
 
-		srcMap, srcIsMap := srcValue.(map[string]any)
-		dstMap, dstIsMap := dstValue.(map[string]any)
+		srcMap, srcIsMap := payload.AsMap(srcValue)
+		dstMap, dstIsMap := payload.AsMap(dstValue)
 		if srcIsMap && dstIsMap {
 			dst[key] = mergeTrees(dstMap, srcMap)
 		}
@@ -173,9 +175,12 @@ func flattenInto(flat map[string]string, tree map[string]any, path []string) {
 	for key, value := range tree {
 		current := append(append([]string{}, path...), key)
 
+		if nested, ok := payload.AsMap(value); ok {
+			flattenInto(flat, nested, current)
+			continue
+		}
+
 		switch typed := value.(type) {
-		case map[string]any:
-			flattenInto(flat, typed, current)
 		case nil:
 			flat[strings.ToUpper(strings.Join(current, "_"))] = ""
 		default:

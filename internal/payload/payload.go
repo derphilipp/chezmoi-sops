@@ -53,7 +53,27 @@ type Identity interface {
 }
 
 // Document is a parsed YAML document: a tree of maps, sequences and scalars.
+//
+// The YAML library decodes a nested mapping into a Document rather than a
+// plain map, so a type switch on map[string]any alone misses the nested
+// values. Use AsMap to handle both.
 type Document map[string]any
+
+// AsMap returns v as a map, whether it is a Document or a plain map.
+//
+// The YAML library decodes a nested mapping into a Document, so both have to
+// be handled: a switch on map[string]any alone would miss every nested
+// value.
+func AsMap(v any) (map[string]any, bool) {
+	switch t := v.(type) {
+	case map[string]any:
+		return t, true
+	case Document:
+		return map[string]any(t), true
+	default:
+		return nil, false
+	}
+}
 
 // Clone returns a deep copy of the document.
 func (d Document) Clone() Document {
@@ -69,14 +89,18 @@ func (d Document) Clone() Document {
 
 func cloneValue(v any) any {
 	switch t := v.(type) {
+	case Document:
+		out := make(Document, len(t))
+		for k, val := range t {
+			out[k] = cloneValue(val)
+		}
+		return out
 	case map[string]any:
 		out := make(map[string]any, len(t))
 		for k, val := range t {
 			out[k] = cloneValue(val)
 		}
 		return out
-	case Document:
-		return t.Clone()
 	case []any:
 		out := make([]any, len(t))
 		for i, val := range t {

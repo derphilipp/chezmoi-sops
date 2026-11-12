@@ -262,6 +262,12 @@ func checkMAC(tree sops.Tree, dataKey []byte, computedMAC string) error {
 // the structure of the document intact.
 func blankValues(value any) any {
 	switch t := value.(type) {
+	case Document:
+		out := make(Document, len(t))
+		for k, v := range t {
+			out[k] = blankValues(v)
+		}
+		return out
 	case map[string]any:
 		out := make(map[string]any, len(t))
 		for k, v := range t {

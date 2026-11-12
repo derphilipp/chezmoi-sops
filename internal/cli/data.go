@@ -57,6 +57,11 @@ func runData(cmd *cobra.Command, args []string) error {
 	}
 
 	if !quiet {
+		if len(environment.Identities) == 0 {
+			fmt.Fprintln(os.Stderr,
+				"Warning: no age identity was found, so no group could be decrypted. "+
+					"Restore an authorized key, or run 'chezmoi sops doctor' to see what was looked at.")
+		}
 		for _, warning := range result.Warnings {
 			fmt.Fprintf(os.Stderr, "Warning: %s\n", warning)
 		}
@@ -104,16 +109,20 @@ func statusDocument(result *groups.Result) map[string]any {
 		}
 	}
 
-	available := false
-	for _, status := range result.Status {
-		if status.Available {
-			available = true
-			break
+	// The top level mirrors the "default" group, which is the one the
+	// templates look at: the default group holds the secrets every machine
+	// is meant to have, so its status is the status of the whole set.
+	defaultStatus, ok := result.Status["default"]
+	if !ok {
+		defaultStatus = groups.Status{
+			Available: false,
+			Reason:    groups.ReasonNoIdentity,
 		}
 	}
 
 	return map[string]any{
-		"available": available,
+		"available": defaultStatus.Available,
+		"reason":    defaultStatus.Reason,
 		"groups":    groupStatus,
 	}
 }
