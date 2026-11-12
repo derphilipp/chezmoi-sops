@@ -1,0 +1,61 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache: true
+
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -race ./...
+
+      - name: Build
+        run: go build -trimpath -o /tmp/chezmoi-sops ./cmd/chezmoi-sops
+
+  compat:
+    # The sops files chezmoi-sops writes must be readable by the real sops
+    # binary, and vice versa. sops is the oracle here, not our own code.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache: true
+
+      - name: Install sops
+        run: |
+          curl -sSLo sops.tar.gz \
+            "https://github.com/getsops/sops/releases/download/v3.13.3/sops-v3.13.3.linux.amd64"
+          tar -xzf sops.tar.gz sops
+          sudo mv sops /usr/local/bin/
+          sops --version
+
+      - name: Compatibility test
+        run: go test -tags=compat ./...

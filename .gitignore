@@ -1,0 +1,14 @@
+# Build output
+/dist/
+/chezmoi-sops
+
+# Go
+*.test
+*.out
+coverage.*
+
+# Editors
+.idea/
+.vscode/
+*.swp
+.DS_Store
