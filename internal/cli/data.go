@@ -109,11 +109,11 @@ func statusDocument(result *groups.Result, available bool, reason string) map[st
 	groupStatus := map[string]any{}
 	for name, status := range result.Status {
 		groupStatus[name] = map[string]any{
-			"available":      status.Available,
-			"reason":         status.Reason,
-			"format":         status.Format,
-			"payloads":       status.Payloads,
-			"recipientsFile": status.Recipients,
+			"available":  status.Available,
+			"reason":     status.Reason,
+			"format":     status.Format,
+			"payloads":   status.Payloads,
+			"recipients": status.Recipients,
 		}
 	}
 

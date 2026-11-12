@@ -87,7 +87,9 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 		if group.Payload == "" {
 			continue
 		}
-		target := filepath.Join(dir, groups.GroupsDir, migratedName(group.Name), filepath.Base(group.Payload))
+		// The directory already says which group the payload belongs to,
+		// so the file is named after the group too.
+		target := filepath.Join(dir, groups.GroupsDir, migratedName(group.Name), migratedName(group.Name)+payloadSuffix(group.Payload))
 		if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
 			return fail("Creating %s: %s", filepath.Dir(target), err)
 		}
@@ -241,6 +243,14 @@ func hostsOfGroup(group oldGroup, registry map[string][]string) []string {
 
 	sort.Strings(hosts)
 	return hosts
+}
+
+// payloadSuffix returns the format suffix of a payload file.
+func payloadSuffix(path string) string {
+	if strings.HasSuffix(path, ".sops.yaml") {
+		return ".sops.yaml"
+	}
+	return ".age"
 }
 
 // sortedKeys returns the keys of a map in sorted order.
