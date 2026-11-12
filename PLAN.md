@@ -407,10 +407,11 @@ path, even when `--source` points somewhere else. A test that runs
 `chezmoi init --source /tmp/test` therefore overwrites
 `~/.config/chezmoi/chezmoi.toml` with the test's configuration.
 
-The isolation flag is `--config-path`:
+The isolation flag is `--config-path`, and it belongs to `init`:
 
 ```sh
-chezmoi --source /tmp/test --config-path /tmp/test/chezmoi.toml init
+chezmoi --source /tmp/test init --config-path /tmp/test/chezmoi.toml
+chezmoi --source /tmp/test --config /tmp/test/chezmoi.toml apply
 ```
 
 This cost an afternoon of debugging a "mysterious" mismatch between the
