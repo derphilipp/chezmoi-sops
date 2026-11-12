@@ -50,6 +50,9 @@ type Result struct {
 	// Status is the per-group status.
 	Status map[string]Status
 
+	// GroupValues are the values of each group, before they were merged.
+	GroupValues map[string]map[string]any
+
 	// Warnings are the problems found while merging.
 	Warnings []string
 }
@@ -66,9 +69,10 @@ type Result struct {
 // the others alphabetically.
 func Merge(registry Registry, values map[string]map[string]any, status map[string]Status) *Result {
 	result := &Result{
-		Tree:   map[string]any{},
-		Flat:   map[string]string{},
-		Status: status,
+		Tree:        map[string]any{},
+		Flat:        map[string]string{},
+		Status:      status,
+		GroupValues: values,
 	}
 
 	real := map[string]any{}

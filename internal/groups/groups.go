@@ -218,6 +218,35 @@ func ParseHostRegistry(path string) (HostRegistry, error) {
 	return registry, nil
 }
 
+// Entry is one public key with the machine it belongs to.
+type Entry struct {
+	// Host is the name of the machine.
+	Host string
+
+	// Key is the age public key.
+	Key string
+}
+
+// Entries returns the entries of the registry, sorted by host name.
+//
+// The order is stable, so the output of "chezmoi sops groups" does not
+// change between runs.
+func (r HostRegistry) Entries() []Entry {
+	var entries []Entry
+	for key, hosts := range r.hosts {
+		for _, host := range hosts {
+			entries = append(entries, Entry{Host: host, Key: key})
+		}
+	}
+	sort.SliceStable(entries, func(i, j int) bool {
+		if entries[i].Host != entries[j].Host {
+			return entries[i].Host < entries[j].Host
+		}
+		return entries[i].Key < entries[j].Key
+	})
+	return entries
+}
+
 // HostsForKey returns the host names that own the given public key.
 func (r HostRegistry) HostsForKey(key string) []string {
 	return r.hosts[key]
