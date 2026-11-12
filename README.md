@@ -121,23 +121,30 @@ group that holds a value wins.
 
 ## Install
 
-With [mise](https://mise.jdx.dev):
+With [mise](https://mise.jdx.dev), which installs the release binary:
 
-```sh
-mise install github:derphilipp/chezmoi-sops@0.2.0
+```toml
+[tool_alias]
+chezmoi-sops = "github:derphilipp/chezmoi-sops"
+
+[tools]
+chezmoi-sops = "0.3.0"
 ```
 
-With Go:
+The version is pinned on purpose: the layout of the secrets depends on it,
+so upgrading it is a deliberate act.
+
+With Go, which builds from the source:
 
 ```sh
-go install github.com/derphilipp/chezmoi-sops/cmd/chezmoi-sops@v0.2.0
+go install github.com/derphilipp/chezmoi-sops/cmd/chezmoi-sops@v0.3.0
 ```
 
 > **A note on `@latest` with mise.** mise hides releases that are younger
 > than its `minimum_release_age` setting (24 hours by default), so
 > `mise install github:derphilipp/chezmoi-sops` — without a version — will
 > not find a release published in the last day. Pin the version, as above,
-> or use `mise install github:derphilipp/chezmoi-sops@0.2.0` to install a
+> or use `mise install github:derphilipp/chezmoi-sops@0.3.0` to install a
 > fresh release straight away. `go install ...@latest` is not affected.
 
 Either way, verify that the shell that runs `chezmoi` can find it:
@@ -145,6 +152,16 @@ Either way, verify that the shell that runs `chezmoi` can find it:
 ```sh
 chezmoi-sops --version
 ```
+
+The release binary knows the commit it was built from, because the build
+stamps it:
+
+```
+chezmoi-sops version v0.3.0 (commit 8689052)
+```
+
+A binary installed with `go install` reports the pseudo-version of the
+commit it was built from, which carries the commit as well.
 
 If that fails, the `PATH` is the problem — and `chezmoi init` will fail
 with the error shown above.
