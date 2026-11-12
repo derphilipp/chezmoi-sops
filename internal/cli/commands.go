@@ -25,8 +25,8 @@ given.`,
 		RunE: runEdit,
 	}
 	cmd.Flags().BoolP("force", "f", false, "overwrite without decrypting first")
-	cmd.Flags().String("sops", "", "convert the group to the sops format")
-	cmd.Flags().String("age", "", "convert the group to the age format")
+	cmd.Flags().Bool("sops", false, "convert the group to the sops format")
+	cmd.Flags().Bool("age", false, "convert the group to the age format")
 	return cmd
 }
 
@@ -37,9 +37,9 @@ func runEdit(cmd *cobra.Command, args []string) error {
 	}
 
 	force, _ := cmd.Flags().GetBool("force")
-	wantSOPS, _ := cmd.Flags().GetString("sops")
-	wantAge, _ := cmd.Flags().GetString("age")
-	if wantSOPS != "" && wantAge != "" {
+	wantSOPS, _ := cmd.Flags().GetBool("sops")
+	wantAge, _ := cmd.Flags().GetBool("age")
+	if wantSOPS && wantAge {
 		return fail("Choose either --sops or --age, not both.")
 	}
 
@@ -64,9 +64,9 @@ func runEdit(cmd *cobra.Command, args []string) error {
 
 	format := "sops"
 	switch {
-	case wantAge != "":
+	case wantAge:
 		format = "age"
-	case wantSOPS != "":
+	case wantSOPS:
 		format = "sops"
 	case group.Format != nil:
 		format = group.Format.Name()
@@ -86,24 +86,31 @@ func runEdit(cmd *cobra.Command, args []string) error {
 
 	target := payloadPath(environment.Config.SecretsDir(), name, format)
 
+	// The payload is read from the old file, so a conversion keeps the
+	// values.
+	source := target
+	if group.PayloadPath != "" {
+		source = group.PayloadPath
+	}
+
+	// The old payload may be in another format, so it is decrypted with
+	// its own format and the new one is written in the wanted format.
+	var sourceFormat payload.Payload = formatPayload
+	if group.Format != nil {
+		sourceFormat = group.Format
+	}
+
 	ed := editor.Editor{Command: flagEditor}
-	result, err := ed.Edit(cmd.Context(), target, editor.Options{
-		Format:     formatPayload,
-		Recipients: recipients,
-		Identities: environment.Identities,
-		Force:      force,
-		Template:   editor.DefaultTemplate,
+	result, err := ed.Edit(cmd.Context(), source, target, editor.Options{
+		Format:       formatPayload,
+		SourceFormat: sourceFormat,
+		Recipients:   recipients,
+		Identities:   environment.Identities,
+		Force:        force,
+		Template:     editor.DefaultTemplate,
 	})
 	if err != nil {
 		return fail("%s", err)
-	}
-
-	// Converting formats drops the old payload.
-	if group.Format != nil && group.PayloadPath != "" && group.PayloadPath != target {
-		if err := os.Remove(group.PayloadPath); err != nil && !os.IsNotExist(err) {
-			return fail("Removing the old payload %s: %s", group.PayloadPath, err)
-		}
-		result.Converted = true
 	}
 
 	switch {
@@ -143,18 +150,18 @@ that host from the recipient registry.`,
 	}
 	cmd.Flags().Bool("per-host", false, "create one group per host")
 	cmd.Flags().String("suffix", "", "suffix for the --per-host group names")
-	cmd.Flags().String("sops", "", "use the sops format (default)")
-	cmd.Flags().String("age", "", "use the whole-file age format")
+	cmd.Flags().Bool("sops", false, "use the sops format (default)")
+	cmd.Flags().Bool("age", false, "use the whole-file age format")
 	return cmd
 }
 
 func runNew(cmd *cobra.Command, args []string) error {
 	perHost, _ := cmd.Flags().GetBool("per-host")
 	suffix, _ := cmd.Flags().GetString("suffix")
-	wantAge, _ := cmd.Flags().GetString("age")
+	wantAge, _ := cmd.Flags().GetBool("age")
 
 	format := "sops"
-	if wantAge != "" {
+	if wantAge {
 		format = "age"
 	}
 

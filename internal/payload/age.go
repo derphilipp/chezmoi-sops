@@ -33,17 +33,21 @@ func (a *Age) Decrypt(_ context.Context, raw []byte, identities []Identity) (Doc
 		return nil, errors.New("no identity available")
 	}
 
-	var reader io.Reader = bytes.NewReader(raw)
-	if bytes.HasPrefix(raw, []byte(armorHeader)) {
-		reader = armorReader(reader)
-	}
-
+	// Every identity gets a fresh reader: age consumes the stream while it
+	// looks for the matching stanza, so a reader that was used for a
+	// failed attempt cannot be reused.
 	var decrypted []byte
 	for _, identity := range identities {
 		key, err := age.ParseX25519Identity(identity.PrivateKey())
 		if err != nil {
 			continue
 		}
+
+		var reader io.Reader = bytes.NewReader(raw)
+		if bytes.HasPrefix(raw, []byte(armorHeader)) {
+			reader = armorReader(reader)
+		}
+
 		out, err := age.Decrypt(reader, key)
 		if err != nil {
 			continue

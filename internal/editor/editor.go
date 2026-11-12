@@ -47,6 +47,11 @@ type Options struct {
 	// Format is the payload format to write.
 	Format payload.Payload
 
+	// SourceFormat is the format of the payload that is read. It differs
+	// from Format when the group changes its format. When it is nil,
+	// Format is used.
+	SourceFormat payload.Payload
+
 	// Recipients are the age public keys to encrypt for.
 	Recipients []string
 
@@ -72,24 +77,32 @@ type Result struct {
 	Empty bool
 }
 
-// Edit decrypts the payload at path, opens it in the editor, and encrypts it
-// again.
+// Edit decrypts the payload, opens it in the editor, and encrypts it again.
+//
+// The payload is read from source and written to target. They differ when
+// the group changes its format: the old payload is decrypted and the new
+// one is written, so the values survive the conversion.
 //
 // The payload is only written when the editor exits successfully. If the
 // editor fails, the decrypted content is left in a temporary file so nothing
 // is lost.
-func (e Editor) Edit(ctx context.Context, path string, opts Options) (Result, error) {
+func (e Editor) Edit(ctx context.Context, source, target string, opts Options) (Result, error) {
 	result := Result{}
 
-	existing, err := os.ReadFile(path)
+	sourceFormat := opts.SourceFormat
+	if sourceFormat == nil {
+		sourceFormat = opts.Format
+	}
+
+	existing, err := os.ReadFile(source)
 	switch {
 	case err == nil:
 		if !opts.Force {
-			decrypted, err := opts.Format.Decrypt(ctx, existing, opts.Identities)
+			decrypted, err := sourceFormat.Decrypt(ctx, existing, opts.Identities)
 			if err != nil {
 				return result, fmt.Errorf(
 					"cannot decrypt %s: is this machine a recipient of this group? "+
-						"Use --force to overwrite the payload anyway: %w", path, err)
+						"Use --force to overwrite the payload anyway: %w", source, err)
 			}
 			existing = mustMarshal(decrypted)
 		} else {
@@ -97,13 +110,13 @@ func (e Editor) Edit(ctx context.Context, path string, opts Options) (Result, er
 			// document, so its metadata has to be stripped before it can be
 			// edited. What is left are the key names of the old secrets,
 			// which is the useful part of the shape.
-			existing = stripMetadata(opts.Format, existing)
+			existing = stripMetadata(sourceFormat, existing)
 		}
 	case os.IsNotExist(err):
 		result.Created = true
 		existing = opts.Template
 	default:
-		return result, fmt.Errorf("reading %s: %w", path, err)
+		return result, fmt.Errorf("reading %s: %w", source, err)
 	}
 
 	if len(existing) == 0 {
@@ -153,13 +166,30 @@ func (e Editor) Edit(ctx context.Context, path string, opts Options) (Result, er
 		result.Empty = true
 	}
 
-	encrypted, err := opts.Format.Encrypt(ctx, mustParse(edited), opts.Recipients)
+	// A document that cannot be parsed is an error, not an empty
+	// document: silently writing an empty payload would throw away the
+	// secrets.
+	doc, err := payload.Parse(edited)
+	if err != nil {
+		return result, fmt.Errorf("the edited document could not be parsed, "+
+			"the plaintext is at %s: %w", tempPath, err)
+	}
+
+	encrypted, err := opts.Format.Encrypt(ctx, doc, opts.Recipients)
 	if err != nil {
 		return result, fmt.Errorf("encrypting the payload, the plaintext is at %s: %w", tempPath, err)
 	}
 
-	if err := os.WriteFile(path, encrypted, 0o600); err != nil {
-		return result, fmt.Errorf("writing %s: %w", path, err)
+	if err := os.WriteFile(target, encrypted, 0o600); err != nil {
+		return result, fmt.Errorf("writing %s: %w", target, err)
+	}
+
+	// Converting formats drops the old payload.
+	if source != target {
+		if err := os.Remove(source); err != nil && !os.IsNotExist(err) {
+			return result, fmt.Errorf("removing the old payload %s: %w", source, err)
+		}
+		result.Converted = true
 	}
 
 	return result, nil
@@ -172,15 +202,6 @@ func mustMarshal(doc payload.Document) []byte {
 		return nil
 	}
 	return out
-}
-
-// mustParse parses a plain YAML document.
-func mustParse(raw []byte) payload.Document {
-	doc, err := payload.Parse(raw)
-	if err != nil {
-		return payload.Document{}
-	}
-	return doc
 }
 
 // stripMetadata removes the sops metadata from a payload, so an encrypted
