@@ -54,10 +54,11 @@ jobs:
 
       - name: Install sops
         run: |
-          curl -sSLo sops.tar.gz \
+          # The release asset is the raw binary, not a tarball.
+          curl -sSL -o /tmp/sops \
             "https://github.com/getsops/sops/releases/download/v3.13.3/sops-v3.13.3.linux.amd64"
-          tar -xzf sops.tar.gz sops
-          sudo mv sops /usr/local/bin/
+          chmod 0755 /tmp/sops
+          sudo mv /tmp/sops /usr/local/bin/sops
           sops --version
 
       - name: Compatibility test
