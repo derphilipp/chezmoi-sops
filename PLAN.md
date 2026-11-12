@@ -391,14 +391,21 @@ the same bootstrap situation sops is in today. The graceful degradation
 T2.2 and T2.3 belong to the dotfiles repo, which is a separate decision
 (Phase 4).
 
-### Phase 3 — release engineering
+### Phase 3 — release engineering — **DONE**
 
-- [ ] `.goreleaser.yaml` — linux/darwin/windows × amd64/arm64, tarballs, checksums
-- [ ] `.github/workflows/release.yml` — on tag → goreleaser → GitHub release
-- [ ] install docs: `mise install github:derphilipp/chezmoi-sops`, plus
+- [x] `.goreleaser.yaml` — linux/darwin/windows × amd64/arm64, tarballs, checksums
+- [x] `.github/workflows/release.yml` — on tag → goreleaser → GitHub release
+- [x] install docs: `mise install github:derphilipp/chezmoi-sops`, plus
       `go install` and a package-manager note
-- [ ] `chezmoi sops doctor` — report the identity in use, the groups found,
+- [x] `chezmoi sops doctor` — report the identity in use, the groups found,
       which ones decrypt, and why not the others
+- [x] `chezmoi sops <command> --json` — machine-readable output
+
+The binary is about 43 MB. That is the price of the sops library: its root
+package imports the key service, which pulls in the AWS, Google Cloud and
+Azure key-management SDKs even though only age is used here. For
+comparison, the `sops` binary itself is about 50 MB and `chezmoi` about
+41 MB.
 
 ## A gotcha worth knowing: `chezmoi init` writes to the default config
 
@@ -451,11 +458,23 @@ timestamp.
 
 ## Open questions
 
-1. **Name.** `chezmoi-sops` is the working name. It is baked into the module
-   path, the binary name and the `chezmoi sops` command, so it should be
-   settled before the first release. Alternatives: `chezmoi-groups`,
-   `chezmoi-keys`. (`chezmoi-secrets` is out — it collides with chezmoi's
-   builtin `chezmoi secret` for the keyring.)
+1. **Name — recommended: `chezmoi-sops`.** It is what the code uses now, and
+   the three names are tied together: the module path
+   `github.com/derphilipp/chezmoi-sops`, the binary `chezmoi-sops`, and the
+   plugin command `chezmoi sops` (chezmoi looks for `chezmoi-<command>` on
+   the PATH, so the command name *is* the binary name).
+
+   `chezmoi sops` does not clash with any builtin chezmoi command — the
+   encryption commands are `age`, `age-keygen`, `decrypt`, `edit-encrypted`
+   and `encrypt`, and the only secret-related one is `secret` (the keyring),
+   which is why `chezmoi-secrets` would be a bad name.
+
+   The alternatives are `chezmoi-groups` (describes the group model, but
+   says nothing about the sops encryption) and `chezmoi-keys` (too vague,
+   and "keys" suggests key material rather than secret groups).
+
+   The name only has to be settled before the first release, because it is
+   baked into the module path, the binary name and the command.
 2. Should the tool also support `age`-format groups with a shape, e.g. by
    storing the shape in a sidecar file? (Currently the age format has no
    shape, so an unreadable age group contributes nothing.)
