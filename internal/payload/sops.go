@@ -313,3 +313,30 @@ func (a *AgeIdentity) Recipient() string {
 func (a *AgeIdentity) PrivateKey() string {
 	return a.identity.String()
 }
+
+// Recipients implements Payload.
+//
+// The sops metadata lists the recipients in the clear, so they can be read
+// without the key. That is what makes it possible to tell that a payload
+// was not encrypted again after its group changed.
+func (s *SOPS) Recipients(raw []byte) ([]string, error) {
+	var doc struct {
+		Sops struct {
+			Age []struct {
+				Recipient string `yaml:"recipient"`
+			} `yaml:"age"`
+		} `yaml:"sops"`
+	}
+
+	if err := yamlv3.Unmarshal(raw, &doc); err != nil {
+		return nil, fmt.Errorf("parsing document: %w", err)
+	}
+
+	recipients := make([]string, 0, len(doc.Sops.Age))
+	for _, key := range doc.Sops.Age {
+		if key.Recipient != "" {
+			recipients = append(recipients, key.Recipient)
+		}
+	}
+	return recipients, nil
+}

@@ -40,6 +40,13 @@ type Payload interface {
 	// remain visible without decrypting anything. It returns ErrNoShape for
 	// formats that cannot do this.
 	Shape(raw []byte) (Document, error)
+
+	// Recipients returns the age public keys the payload is encrypted for.
+	//
+	// The sops format keeps them in the cleartext metadata of the
+	// document, so they can be read without the key. The whole-file age
+	// format cannot tell, and returns nil.
+	Recipients(raw []byte) ([]string, error)
 }
 
 // Identity is an age private key that can decrypt a payload.

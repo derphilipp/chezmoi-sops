@@ -144,3 +144,11 @@ func ParseIdentities(path string) ([]Identity, error) {
 	}
 	return identities, nil
 }
+
+// Recipients implements Payload.
+//
+// The whole-file age format cannot tell: the recipients are inside the
+// encrypted blob, so there is nothing to read without the key.
+func (a *Age) Recipients(_ []byte) ([]string, error) {
+	return nil, nil
+}

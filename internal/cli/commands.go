@@ -341,6 +341,12 @@ func runGroups(cmd *cobra.Command, args []string) error {
 		return printJSON(output)
 	}
 
+	problems := environment.checkGroups()
+	outOfSync := map[string]bool{}
+	for _, problem := range problems {
+		outOfSync[problem.Name] = true
+	}
+
 	fmt.Println()
 	fmt.Println("Secret groups")
 	for _, group := range environment.Layout.Groups {
@@ -349,9 +355,23 @@ func runGroups(cmd *cobra.Command, args []string) error {
 		if status.Available {
 			mark = "✓"
 		}
+		if outOfSync[group.Name] {
+			// The payload is encrypted for a different set of keys than
+			// the group has members.
+			mark = "!"
+		}
 		fmt.Printf("  %s %-14s %-6s %2d hosts  %s\n",
 			mark, group.Name, formatOfGroups(group, sources), len(group.Members),
 			strings.Join(group.Members, ", "))
+	}
+
+	if len(problems) > 0 {
+		fmt.Println()
+		fmt.Println("The payloads of these groups are not encrypted for the current members:")
+		for _, problem := range problems {
+			fmt.Printf("  %s: %s\n", problem.Name, problem.describe())
+		}
+		fmt.Println("Run 'chezmoi sops sync' to encrypt them again.")
 	}
 
 	fmt.Println()

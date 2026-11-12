@@ -74,6 +74,12 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		fmt.Println("  none found")
 	}
 
+	problems := environment.checkGroups()
+	outOfSync := map[string]outOfSync{}
+	for _, problem := range problems {
+		outOfSync[problem.Name] = problem
+	}
+
 	fmt.Println()
 	fmt.Println("Secret groups")
 	for _, group := range environment.Layout.Groups {
@@ -87,6 +93,10 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 			strings.Join(group.Members, ", "))
 		if !status.Available && status.Reason != "" {
 			fmt.Printf("      %s\n", status.Reason)
+		}
+		if problem, ok := outOfSync[group.Name]; ok {
+			fmt.Printf("      the payload is out of date: %s\n", problem.describe())
+			fmt.Printf("      run 'chezmoi sops sync' to encrypt it again\n")
 		}
 	}
 

@@ -98,6 +98,7 @@ func init() {
 		newMembersCmd(),
 		newKeysCmd(),
 		newRenameCmd(),
+		newSyncCmd(),
 		newHostsCmd(),
 		newMigrateCmd(),
 	)

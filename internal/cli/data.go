@@ -67,6 +67,15 @@ func runData(cmd *cobra.Command, args []string) error {
 		for _, warning := range result.Warnings {
 			fmt.Fprintf(os.Stderr, "Warning: %s\n", warning)
 		}
+		// A payload that is not encrypted for the current members is a
+		// problem of the repository, not of this machine, so it is
+		// reported wherever the secrets are read.
+		for _, problem := range environment.checkGroups() {
+			fmt.Fprintf(os.Stderr,
+				"Warning: the payload of group %q is not encrypted for the current members: %s. "+
+					"Run 'chezmoi sops sync' to encrypt it again.\n",
+				problem.Name, problem.describe())
+		}
 		for _, source := range sources {
 			if source.Kind != groups.KindGroup || source.Available {
 				continue
