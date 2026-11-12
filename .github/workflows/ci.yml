@@ -40,6 +40,9 @@ jobs:
   compat:
     # The sops files chezmoi-sops writes must be readable by the real sops
     # binary, and vice versa. sops is the oracle here, not our own code.
+    #
+    # The sops library does not guarantee API stability, so a breaking
+    # release fails this job rather than the users of the tool.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -58,4 +61,32 @@ jobs:
           sops --version
 
       - name: Compatibility test
-        run: go test -tags=compat ./...
+        # The compatibility test skips itself when sops is not installed, so
+        # it is run explicitly here to make sure it does not skip.
+        run: go test -race -run 'TestSOPSCompatibleWithCLI' -v ./internal/payload/
+
+  shell:
+    # The tool is a chezmoi plugin, so it has to work on a machine where only
+    # a POSIX shell is available.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache: true
+
+      - name: Build
+        run: go build -trimpath -o /tmp/chezmoi-sops ./cmd/chezmoi-sops
+
+      - name: Check the plugin contract
+        # chezmoi looks for a binary named chezmoi-<command> on the PATH.
+        run: |
+          install -m 0755 /tmp/chezmoi-sops /usr/local/bin/chezmoi-sops
+          chezmoi-sops --help > /dev/null
+          chezmoi-sops groups --help > /dev/null
+          chezmoi-sops data --help > /dev/null
+          chezmoi-sops edit --help > /dev/null
+          chezmoi-sops new --help > /dev/null
+          chezmoi-sops delete --help > /dev/null

@@ -343,37 +343,43 @@ implementation in the dotfiles repo spoke German; that goes away with it.
 
 ## Task breakdown
 
-### Phase 0 — repo hygiene
+### Phase 0 — repo hygiene — **DONE**
 
-- [ ] `go.mod` — module `github.com/derphilipp/chezmoi-sops`, Go 1.27
-- [ ] `.gitignore`, `.editorconfig`
-- [ ] `README.md` — what it is, install, the group layout, a worked example
-- [ ] `Makefile` — `build`, `test`, `lint`, `snapshot`
-- [ ] `.github/workflows/ci.yml` — build, `go test ./...`, `go vet`, golangci-lint
-- [ ] `LICENSE` — per D1
+- [x] `go.mod` — module `github.com/derphilipp/chezmoi-sops`, Go 1.27
+- [x] `.gitignore`
+- [x] `README.md` — what it is, install, the group layout, a worked example
+- [x] `Makefile` — `build`, `test`, `lint`, `install`
+- [x] `.github/workflows/ci.yml` — build, `go test -race ./...`, `go vet`, gofmt
+- [x] `LICENSE` — MIT, per D1
 - [ ] `CONTRIBUTING.md`
+- [ ] `.editorconfig`
 
-### Phase 1 — core + CLI
+### Phase 1 — core + CLI — **DONE**
 
-- [ ] **T1.1** `internal/payload` — interface, plus `Shape` for sops (the walk that blanks `ENC[…]` values)
-- [ ] **T1.2** `internal/payload` — sops encrypt/decrypt against the library (per D2)
-- [ ] **T1.3** `internal/payload` — whole-file age format
-- [ ] **T1.4** `internal/keyring` — identity discovery
-- [ ] **T1.5** `internal/groups` — discovery of `*.recipients.txt`, the recipients registry (`# hostname` → key), the key→host reverse lookup
-- [ ] **T1.6** `internal/groups` — merge and flatten, matching the current semantics exactly
-- [ ] **T1.7** `internal/editor` — decrypt → temp file (0600) → `$EDITOR` → re-encrypt, including the empty-payload rule (`{}`) and the "undecryptable → refuse" rule
-- [ ] **T1.8** `internal/cli` — cobra root + `edit`, `new`, `groups`, `delete`
-- [ ] **T1.9** `internal/cli` — `--json` output for every command (scriptability)
-- [ ] **T1.10** golden tests — every command's output, and the payload files themselves
+- [x] **T1.1** `internal/payload` — the interface, plus `Shape` for sops (the walk that blanks `ENC[…]` values)
+- [x] **T1.2** `internal/payload` — sops encrypt/decrypt against the library (per D2)
+- [x] **T1.3** `internal/payload` — whole-file age format
+- [x] **T1.4** `internal/keyring` — identity discovery
+- [x] **T1.5** `internal/groups` — discovery of `*.recipients.txt`, the recipients registry (`# hostname` → key), the key→host reverse lookup
+- [x] **T1.6** `internal/groups` — merge and flatten, matching the current semantics exactly
+- [x] **T1.7** `internal/editor` — decrypt → temp file (0600) → `$EDITOR` → re-encrypt, including the empty-payload rule (`{}`) and the "undecryptable → refuse" rule
+- [x] **T1.8** `internal/cli` — cobra root + `edit`, `new`, `groups`, `delete`, `data`
+- [x] **T1.9** `internal/chezmoi` — read chezmoi's own configuration, so there is no second config file
+- [ ] **T1.10** `--json` output for every command (scriptability)
+- [x] **T1.11** tests — the merge semantics, the group discovery, the host registry, and the sops compatibility with the real `sops` binary
 
 Exit criteria: the tool replaces the shell implementation in the dotfiles repo
 with **no behavioural change**. The existing sh script is the reference
 implementation and its quirks are the spec.
 
-### Phase 2 — data provider
+**Verified:** `chezmoi sops data` produces exactly what the current template
+produces — the merged tree, the flat map, the per-group values and the
+per-group status all match, byte for byte.
 
-- [ ] **T2.1** `chezmoi sops data --format json` — emits the merged tree, the flat
-      map and the per-group status
+### Phase 2 — data provider — **DONE (the tool side)**
+
+- [x] **T2.1** `chezmoi sops data --format json` — emits the merged tree, the flat
+      map, the per-group values and the per-group status
 - [ ] **T2.2** the dotfiles config template switches to
       `fromJson (output "chezmoi-sops" "data" --format json)`
 - [ ] **T2.3** the template's ~150 lines of jq/merge logic is deleted
@@ -381,6 +387,9 @@ implementation and its quirks are the spec.
 Note the coupling: the tool must exist before the first `chezmoi init` —
 the same bootstrap situation sops is in today. The graceful degradation
 ("group unavailable → empty values") must be preserved exactly.
+
+T2.2 and T2.3 belong to the dotfiles repo, which is a separate decision
+(Phase 4).
 
 ### Phase 3 — release engineering
 
