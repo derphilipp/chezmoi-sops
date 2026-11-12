@@ -94,5 +94,6 @@ func init() {
 		newGroupsCmd(),
 		newDeleteCmd(),
 		newDataCmd(),
+		newDoctorCmd(),
 	)
 }
