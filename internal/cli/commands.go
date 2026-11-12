@@ -27,6 +27,7 @@ given.`,
 	cmd.Flags().BoolP("force", "f", false, "overwrite without decrypting first")
 	cmd.Flags().Bool("sops", false, "convert the group to the sops format")
 	cmd.Flags().Bool("age", false, "convert the group to the age format")
+	addJSONFlag(cmd)
 	return cmd
 }
 
@@ -152,6 +153,7 @@ that host from the recipient registry.`,
 	cmd.Flags().String("suffix", "", "suffix for the --per-host group names")
 	cmd.Flags().Bool("sops", false, "use the sops format (default)")
 	cmd.Flags().Bool("age", false, "use the whole-file age format")
+	addJSONFlag(cmd)
 	return cmd
 }
 
@@ -181,19 +183,25 @@ func runNew(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return fail("%s", err)
 			}
-			if err := createGroup(environment, groupName, keys, format); err != nil {
+			if err := createGroup(cmd, environment, groupName, keys, format); err != nil {
 				return err
 			}
 		}
-		fmt.Println("Fill in the values with: chezmoi sops edit <group>")
+		if !jsonRequested(cmd) {
+			fmt.Println("Fill in the values with: chezmoi sops edit <group>")
+		}
 		return nil
 	}
 
 	name := args[0]
 	recipients := args[1:]
 
-	if err := createGroup(environment, name, recipients, format); err != nil {
+	if err := createGroup(cmd, environment, name, recipients, format); err != nil {
 		return err
+	}
+
+	if jsonRequested(cmd) {
+		return nil
 	}
 
 	if len(recipients) == 0 {
@@ -207,7 +215,7 @@ func runNew(cmd *cobra.Command, args []string) error {
 }
 
 // createGroup creates the recipients file and an empty payload of a group.
-func createGroup(environment *env, name string, recipients []string, format string) error {
+func createGroup(cmd *cobra.Command, environment *env, name string, recipients []string, format string) error {
 	recipientsPath := groupRecipientsPath(environment, name)
 	if err := mustExist(recipientsPath); err == nil {
 		return fail("Group %q already exists: %s", name, recipientsPath)
@@ -223,7 +231,9 @@ func createGroup(environment *env, name string, recipients []string, format stri
 	if err := os.WriteFile(recipientsPath, []byte(content.String()), 0o644); err != nil {
 		return fail("Writing %s: %s", recipientsPath, err)
 	}
-	fmt.Printf("Created the recipients file: %s\n", recipientsPath)
+	if !jsonRequested(cmd) {
+		fmt.Printf("Created the recipients file: %s\n", recipientsPath)
+	}
 
 	target := payloadPath(environment.Config.SecretsDir(), name, format)
 
@@ -248,13 +258,23 @@ func createGroup(environment *env, name string, recipients []string, format stri
 	if err := os.WriteFile(target, encrypted, 0o600); err != nil {
 		return fail("Writing %s: %s", target, err)
 	}
-	fmt.Printf("Created the payload: %s\n", target)
+	if !jsonRequested(cmd) {
+		fmt.Printf("Created the payload: %s\n", target)
+	}
+
+	if jsonRequested(cmd) {
+		return printJSON(jsonOutput{
+			Command: "new",
+			OK:      true,
+			Message: fmt.Sprintf("Created group %q.", name),
+		})
+	}
 
 	return nil
 }
 
 func newGroupsCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "groups",
 		Short: "Show which machines are in which group",
 		Long: `Show which machines are in which group.
@@ -264,6 +284,8 @@ second table lists the machines and the groups they can read.`,
 		Args: cobra.NoArgs,
 		RunE: runGroups,
 	}
+	addJSONFlag(cmd)
+	return cmd
 }
 
 func runGroups(cmd *cobra.Command, args []string) error {
@@ -275,6 +297,29 @@ func runGroups(cmd *cobra.Command, args []string) error {
 	registry, err := environment.hostRegistry()
 	if err != nil {
 		return err
+	}
+
+	if jsonRequested(cmd) {
+		output := jsonOutput{Command: "groups", OK: true}
+		for _, group := range environment.Registry.Groups {
+			recipients, _ := group.Recipients()
+			output.Groups = append(output.Groups, jsonGroup{
+				Name:           group.Name,
+				Format:         formatOf(group),
+				RecipientsFile: group.RecipientsPath,
+				Payload:        group.PayloadPath,
+				Hosts:          environment.hostsOfGroup(group, registry),
+				Recipients:     recipients,
+			})
+		}
+		for _, entry := range registry.Entries() {
+			output.Hosts = append(output.Hosts, jsonHost{
+				Host:   entry.Host,
+				Key:    entry.Key,
+				Groups: environment.groupsOfKey(entry.Key),
+			})
+		}
+		return printJSON(output)
 	}
 
 	fmt.Println()
@@ -303,7 +348,7 @@ func runGroups(cmd *cobra.Command, args []string) error {
 }
 
 func newDeleteCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "delete <group>",
 		Short: "Remove a secret group",
 		Long: `Remove a secret group.
@@ -313,6 +358,8 @@ registry, which is the "default" group, cannot be removed.`,
 		Args: cobra.ExactArgs(1),
 		RunE: runDelete,
 	}
+	addJSONFlag(cmd)
+	return cmd
 }
 
 func runDelete(cmd *cobra.Command, args []string) error {
@@ -329,6 +376,7 @@ func runDelete(cmd *cobra.Command, args []string) error {
 
 	dir := environment.Config.SecretsDir()
 	removed := 0
+	var removedPaths []string
 	for _, suffix := range []string{
 		groups.RecipientsSuffix,
 		groups.SOPSPayloadSuffix,
@@ -337,7 +385,10 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		path := dir + string(os.PathSeparator) + name + suffix
 		if err := os.Remove(path); err == nil {
 			removed++
-			fmt.Printf("Removed %s\n", path)
+			removedPaths = append(removedPaths, path)
+			if !jsonRequested(cmd) {
+				fmt.Printf("Removed %s\n", path)
+			}
 		} else if !os.IsNotExist(err) {
 			return fail("Removing %s: %s", path, err)
 		}
@@ -345,6 +396,15 @@ func runDelete(cmd *cobra.Command, args []string) error {
 
 	if removed == 0 {
 		return fail("Group %q does not exist.", name)
+	}
+
+	if jsonRequested(cmd) {
+		return printJSON(jsonOutput{
+			Command: "delete",
+			OK:      true,
+			Message: fmt.Sprintf("Deleted group %q.", name),
+			Removed: removedPaths,
+		})
 	}
 
 	fmt.Println("Run 'chezmoi init && chezmoi apply' to apply the change.")
