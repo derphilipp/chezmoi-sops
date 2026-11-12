@@ -43,6 +43,116 @@ binary per platform, usable by anyone with chezmoi + sops + age.
 Phases 0–3 make this a useful standalone tool. Phase 4 is what makes it
 *yours*.
 
+## The chezmoi integration — what is actually possible
+
+This section answers the question that drove the design: **can the tool
+replace chezmoi's use of `age` entirely, so that chezmoi itself does the
+encryption?**
+
+The answer is **yes, with one important limitation**, and the limitation is
+worth stating precisely because it shapes the whole architecture.
+
+### What chezmoi offers as extension points
+
+Verified against chezmoi v2.73.3 (`internal/cmd/config.go`,
+`internal/chezmoi/ageencryption.go`):
+
+| Extension point | What it does | Usable here? |
+|---|---|---|
+| `encryption = "age"` | selects the encryption scheme | **fixed enum** — `age`, `gpg`, `transparent`. There is no custom-scheme hook. |
+| `[age] command` | the binary chezmoi shells out to for `age` | **yes** — this is the hook |
+| `[age] args` | extra arguments for that command | yes |
+| `[age] identity` / `identities` | paths to the age private key(s) | yes — this is the identity source |
+| `[age] recipient` / `recipients` / `recipientsFile` | the age public key(s) | yes — but **one global list**, not per group |
+| `encrypted_` source attribute | marks a source file as encrypted | yes — the file-level mechanism |
+| `age.suffix` | suffix for encrypted files, default `.age` | yes |
+
+`[age] command` is the whole story. chezmoi does:
+
+```go
+cmd := exec.Command(e.Command, append(e.decryptArgs(), e.Args...)...)
+cmd.Stdin = bytes.NewReader(ciphertext)
+```
+
+with `decryptArgs()` = `--decrypt --identity <path>` and `encryptArgs()` =
+`--armor --encrypt --recipient <key>` / `--recipients-file <path>`.
+
+So chezmoi treats the age command as a **stream filter**: ciphertext on stdin,
+plaintext on stdout. Any binary honouring that contract works.
+
+### The limitation: `age.command` is a *file* filter, not a *group* filter
+
+This is the crux, and it is why the tool has two surfaces rather than one.
+
+chezmoi's `encrypted_` attribute encrypts **one file at a time** into **one
+opaque blob**. There is no per-group recipient list, no readable key names,
+no shape. If the machine cannot decrypt, chezmoi's only options are "error
+out" or "leave the file out".
+
+The group model needs all three of:
+
+1. **per-group recipient lists** — `[age] recipientsFile` is a single global
+   list, so it cannot express "the `home` group is readable by two machines
+   and the `work` group by one",
+2. **readable key names** — the point of the sops format: `HA_FRITZ_TOKEN`
+   stays visible in the repository even when its value is encrypted,
+3. **graceful degradation** — a machine outside a group still renders the
+   template with empty values instead of failing.
+
+None of that fits through `age.command`, because that hook encrypts a whole
+file into a blob. A blob has no shape.
+
+### The design that follows
+
+**The tool does the crypto; chezmoi keeps doing chezmoi.**
+
+```
+                chezmoi's own config (chezmoi.toml)
+                    [age] identity / recipientsFile
+                              │
+                              ▼
+   ┌──────────────────────────────────────────────────────┐
+   │  chezmoi-sops                                        │
+   │                                                      │
+   │   surface A: group management  (chezmoi sops edit …) │
+   │     .secrets/<group>.recipients.txt                  │
+   │     .secrets/<group>.sops.yaml                       │
+   │                                                      │
+   │   surface B: data provider (chezmoi sops data)       │
+   │     merged, shape-aware tree for templates           │
+   └──────────────────────────────────────────────────────┘
+```
+
+- The tool reads chezmoi's **own** config for the identity and the default
+  recipients — one source of truth, no second config file. `chezmoi data
+  --format json` exposes `.chezmoi.config.age` and `.chezmoi.sourceDir`
+  for exactly this, so the tool never parses TOML itself.
+- The **identity** stays chezmoi's: `[age] identity` says which key this
+  machine holds. The tool honours it.
+- The **recipients** stay per group: the tool owns
+  `.secrets/<group>.recipients.txt`, because chezmoi's
+  `[age] recipientsFile` cannot express per-group access.
+- `chezmoi sops data` is what the template calls, replacing the ~150 lines of
+  Go template + jq that do it today.
+
+### Could the tool also be `age.command`?
+
+Technically yes — it could implement `--decrypt`/`--encrypt` and be set as
+`age.command = "chezmoi-sops"`. But then chezmoi's `encrypted_` files would
+be sops-format blobs, and:
+
+- the *shape* is still lost (a blob has no key names),
+- per-group recipients are still impossible (chezmoi passes one global list),
+- and the tool would have to be a **second** encryption format alongside the
+  group format, doubling the surface for no gain.
+
+So: **not recommended.** The group format is the better model, and the tool
+sits beside chezmoi's encryption rather than inside it.
+
+What *is* recommended: **chezmoi's `[age]` section is left alone** and used as
+the identity source. The tool does not replace chezmoi's encryption; it
+provides the richer, group-aware alternative.
+
 ## Architecture
 
 ```
@@ -135,15 +245,12 @@ Go 1.27 is available through mise. The module proxy is reachable.
 
 ## Decisions to make before writing code
 
-### D1 — Licence (blocking for publishing)
+### D1 — Licence — **DECIDED: MIT**
 
-The repo currently has **GPL-3.0** (GitHub's generator). For a tool meant to
-be used by others, that is a strong copyleft: anyone redistributing a binary
-must offer the source, and the licence is viral. Compare: sops is MPL-2.0,
-age is BSD-3-Clause, chezmoi is MIT.
+Done. `LICENSE` was GPL-3.0 (GitHub's generator) and is now MIT.
 
-Options: keep GPL-3.0, or switch to MIT / Apache-2.0 / BSD-3. Changing it
-now is free; changing it after people have started using it is not.
+For reference: sops is MPL-2.0, age is BSD-3-Clause, chezmoi is MIT — so MIT
+puts the tool in the same licence family as the tools it sits between.
 
 ### D2 — How to handle the sops format
 
@@ -217,11 +324,22 @@ whose API *is* stable — removes the dependency on an API sops explicitly
 declines to guarantee, at the cost of reimplementing the data-key wrapping and
 the MAC. The compatibility matrix in CI is the safety net for either option.
 
-### D3 — Language for messages
+### D2 — How to handle the sops format — **DECIDED: (a), the pinned library, in-process**
 
-The current shell implementation speaks German. A public tool should speak
-English. Recommend English, and keep the German output only in the dotfiles
-wrapper if that matters to you.
+Option (b) is out: it would put a `sops` binary on every machine, which is
+exactly the "another tool on board" this project is trying to avoid. Option
+(c) is out: reimplementing the format is reimplementing the wheel.
+
+So the tool uses `github.com/getsops/sops/v3` v3.13.3 as a library, pinned, and
+does the crypto in-process. The library's API stability is a non-issue in
+practice: the version is pinned in `go.mod`, and CI round-trips against the
+real `sops` binary as the oracle, so a breaking upstream release breaks *CI*,
+not users.
+
+### D3 — Language for messages — **DECIDED: English**
+
+All messages, help text and documentation are in English. The shell
+implementation in the dotfiles repo spoke German; that goes away with it.
 
 ## Task breakdown
 
@@ -306,11 +424,13 @@ timestamp.
 
 ## Open questions
 
-1. **Licence** (D1) — keep GPL-3.0, or switch to MIT/Apache-2.0?
-2. **sops API approach** (D2) — library, subprocess, or own implementation?
-3. **Message language** (D3) — English?
-4. Should the tool also support `age`-format groups with a shape, e.g. by
+1. **Name.** `chezmoi-sops` is the working name. It is baked into the module
+   path, the binary name and the `chezmoi sops` command, so it should be
+   settled before the first release. Alternatives: `chezmoi-groups`,
+   `chezmoi-keys`. (`chezmoi-secrets` is out — it collides with chezmoi's
+   builtin `chezmoi secret` for the keyring.)
+2. Should the tool also support `age`-format groups with a shape, e.g. by
    storing the shape in a sidecar file? (Currently the age format has no
    shape, so an unreadable age group contributes nothing.)
-5. Should `chezmoi sops data` become the only way the dotfiles template gets
+3. Should `chezmoi sops data` become the only way the dotfiles template gets
    secrets, or stay optional?
