@@ -5,12 +5,17 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
 
-// version is the version of the tool, set at build time.
-var version = "dev"
+// version and commit are the version of the tool and the commit it was
+// built from, set at build time.
+var (
+	version = "dev"
+	commit  = ""
+)
 
 // SetVersion sets the version of the tool.
 func SetVersion(v string) {
@@ -18,7 +23,45 @@ func SetVersion(v string) {
 		return
 	}
 	version = v
-	rootCmd.Version = v
+	rootCmd.Version = VersionString()
+}
+
+// SetCommit sets the commit the tool was built from.
+func SetCommit(c string) {
+	if c == "" {
+		return
+	}
+	commit = c
+	rootCmd.Version = VersionString()
+}
+
+// VersionString returns the version of the tool, with the commit it was
+// built from.
+//
+// The commit is left out when the version already carries it: the
+// pseudo-version of a source install ends with the commit.
+func VersionString() string {
+	if commit == "" {
+		return version
+	}
+
+	// Some version formats already carry the commit: the pseudo-version
+	// of a source install ends with it, and "git describe" puts it in
+	// there as "-g<commit>".
+	if strings.Contains(version, shortCommit(commit)) {
+		return version
+	}
+
+	return fmt.Sprintf("%s (commit %s)", version, shortCommit(commit))
+}
+
+// shortCommit shortens a commit hash to the seven characters that identify
+// it.
+func shortCommit(c string) string {
+	if len(c) > 7 {
+		return c[:7]
+	}
+	return c
 }
 
 // Global options, shared by every subcommand.
