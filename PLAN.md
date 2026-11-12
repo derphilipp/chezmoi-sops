@@ -400,6 +400,7 @@ implementation in the dotfiles repo spoke German; that goes away with it.
 - [x] `LICENSE` — MIT, per D1
 - [ ] `CONTRIBUTING.md`
 - [ ] `.editorconfig`
+- [ ] `chezmoi sops doctor` — done, but it could also report the merge order
 
 ### Phase 1 — core + CLI — **DONE**
 
@@ -412,8 +413,12 @@ implementation in the dotfiles repo spoke German; that goes away with it.
 - [x] **T1.7** `internal/editor` — decrypt → temp file (0600) → `$EDITOR` → re-encrypt, including the empty-payload rule (`{}`) and the "undecryptable → refuse" rule
 - [x] **T1.8** `internal/cli` — cobra root + `edit`, `new`, `groups`, `delete`, `data`
 - [x] **T1.9** `internal/chezmoi` — read chezmoi's own configuration, so there is no second config file
-- [ ] **T1.10** `--json` output for every command (scriptability)
+- [x] **T1.10** `--json` output for every command (scriptability)
 - [x] **T1.11** tests — the merge semantics, the group discovery, the host registry, and the sops compatibility with the real `sops` binary
+- [x] **T1.12** `internal/access` — the access file, edited as a YAML document so the comments in it survive
+- [x] **T1.13** `members` re-encrypts the payloads of a group for its new members
+- [x] **T1.14** `keys` sets the age keys of a machine, `rename` renames a group or a machine
+- [x] **T1.15** the version is taken from the build information when it is not set at build time
 
 Exit criteria: the tool replaces the shell implementation in the dotfiles repo
 with **no behavioural change**. The existing sh script is the reference
@@ -427,9 +432,9 @@ per-group status all match, byte for byte.
 
 - [x] **T2.1** `chezmoi sops data --format json` — emits the merged tree, the flat
       map, the per-group values and the per-group status
-- [ ] **T2.2** the dotfiles config template switches to
+- [x] **T2.2** the dotfiles config template switches to
       `fromJson (output "chezmoi-sops" "data" --format json)`
-- [ ] **T2.3** the template's ~150 lines of jq/merge logic is deleted
+- [x] **T2.3** the template's ~150 lines of jq/merge logic is deleted
 
 Note the coupling: the tool must exist before the first `chezmoi init` —
 the same bootstrap situation sops is in today. The graceful degradation
