@@ -24,8 +24,16 @@ builds:
       - amd64
       - arm64
     ignore:
+      # Windows on arm64 is not supported by Go's standard library, so
+      # there is nothing to build.
       - goos: windows
         goarch: arm64
+    # The targets are:
+      #   linux/amd64   x86-64 Linux
+      #   linux/arm64   arm64 Linux
+      #   darwin/arm64  Apple silicon
+      #   darwin/amd64  Intel Macs - the dotfiles repository still has one
+      #   windows/amd64 x86-64 Windows
 
 archives:
   - id: default

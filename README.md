@@ -8,6 +8,56 @@ is open. This tool fills that gap: it keeps the readable structure that sops
 gives you (only the *values* are encrypted), adds per-group access control,
 and hands the merged secrets to chezmoi templates.
 
+## Before you start: install the tool before `chezmoi init`
+
+**`chezmoi-sops` has to be installed and on your `PATH` before you run
+`chezmoi init` for the first time on a machine.**
+
+This is not a "nice to have". The chezmoi configuration template calls the
+tool while chezmoi renders it, and that happens at the very start of
+`chezmoi init` — before anything else, and before any `run_` script gets a
+chance to execute. If the binary is missing, `chezmoi init` fails outright
+and writes no configuration at all:
+
+```
+chezmoi: template: chezmoi.toml:53:26: executing "chezmoi.toml" at
+<output "chezmoi-sops" "data">: error calling output: chezmoi-sops data:
+exec: "chezmoi-sops": executable file not found in $PATH
+```
+
+Note that this is *not* the same as "the secrets are unavailable". An
+unavailable secret group is handled gracefully — the template renders with
+empty values. A missing *binary* is fatal.
+
+### The order on a new machine
+
+1. Install chezmoi itself.
+2. Install `chezmoi-sops` and make sure it is on the `PATH` of the shell
+   that will run `chezmoi`. See [Install](#install) below.
+3. Run `chezmoi init`.
+
+Check it at any time:
+
+```sh
+chezmoi-sops doctor
+```
+
+`doctor` reports the chezmoi installation, the identity files it looked
+at, and every group: whether it can be decrypted, and why not when it
+cannot.
+
+### Why it cannot install itself
+
+chezmoi renders the configuration template *before* it runs the `run_`
+scripts in the source directory. A `run_` script that installs the tool
+therefore runs too late to help the first `chezmoi init`. The installation
+has to be done by hand, once per machine.
+
+This replaces the previous arrangement, which needed the `sops` binary
+*and* a `chezmoi-secrets` script (a POSIX shell script plus a PowerShell
+one) to be present before `chezmoi init` could read the secrets. It is now
+one binary, for every platform.
+
 ## Why groups
 
 A **group** is a set of recipients plus a payload:
@@ -36,15 +86,39 @@ is allowed to read and only those.
 
 ## Install
 
+With [mise](https://mise.jdx.dev):
+
 ```sh
 mise install github:derphilipp/chezmoi-sops
 ```
 
-or
+With Go:
 
 ```sh
 go install github.com/derphilipp/chezmoi-sops/cmd/chezmoi-sops@latest
 ```
+
+Either way, verify that the shell that runs `chezmoi` can find it:
+
+```sh
+chezmoi-sops --version
+```
+
+If that fails, the `PATH` is the problem — and `chezmoi init` will fail
+with the error shown above.
+
+### Platforms
+
+Prebuilt binaries are published for:
+
+| Platform | Architecture |
+|---|---|
+| Linux | x86-64 (`amd64`) and arm64 |
+| macOS | Apple silicon (`arm64`) and Intel (`amd64`) |
+| Windows | x86-64 (`amd64`) |
+
+There is no 32-bit build. The release archives are `.tar.gz` everywhere
+except Windows, which gets a `.zip`, together with a `checksums.txt`.
 
 ## Use
 
@@ -57,18 +131,39 @@ chezmoi sops new work age1...     # create a group
 chezmoi sops edit private         # decrypt, edit, re-encrypt
 chezmoi sops delete work          # remove a group
 chezmoi sops data                 # the merged secrets, as JSON
+chezmoi sops doctor               # what works and what does not
 ```
+
+Every command takes `--json` for machine-readable output.
 
 ### In a chezmoi template
 
-```toml
-{{- $secrets := fromJson (output "chezmoi-sops" "data" --quiet) -}}
+The call goes in the **configuration template** — the one chezmoi renders
+before anything else — and nowhere else:
 
-{{ $secrets.secrets.HA_FRITZ_TOKEN }}
-{{ get $secrets.secrets "DATABASE_PASSWORD" }}
+```toml
+{{- $secrets := fromJson (output "chezmoi-sops" "data") -}}
 ```
 
-The `data` command emits:
+Everything else is unchanged. The `data` command returns the four keys
+below, and the configuration template puts them in chezmoi's `[data]`
+section, which is **global**: every template in the repository can then
+read `.secrets` and `.secretsEnv` without calling anything.
+
+```toml
+[data]
+secrets      = {{ get $secrets "secrets" | toJson }}
+secretsEnv   = {{ get $secrets "secretsEnv" | toJson }}
+secretGroups = {{ get $secrets "secretGroups" | toJson }}
+secretStatus = {{ get $secrets "secretStatus" | toJson }}
+```
+
+So a template that uses a secret needs **no change at all**:
+
+```toml
+{{ .secrets.HA_FRITZ_TOKEN }}
+{{ get .secrets "DATABASE_PASSWORD" }}
+```
 
 | Key | What it holds |
 |---|---|
@@ -91,7 +186,8 @@ encryption = "age"
 
 The tool also accepts `--identity`, and falls back to `$SOPS_AGE_KEY_FILE`
 and the usual sops locations (`~/.config/sops/age/keys.txt`,
-`~/.age/key.txt`).
+`~/.age/key.txt`). On Windows, `%AppData%\sops\age\keys.txt` is looked at
+too.
 
 There is no separate configuration file for the tool: it is specific to
 chezmoi and sops, and chezmoi's config already says everything it needs to
@@ -101,12 +197,14 @@ know.
 
 - The sops format is used **in-process**, through the pinned
   `github.com/getsops/sops/v3` library. No `sops` binary is needed at
-  runtime.
+  runtime — only `chezmoi-sops` itself.
 - Files written by the tool are readable by the real `sops` binary, and
   files written by `sops` are readable by the tool. This is checked in CI
   against the real binary — sops is the oracle, not our own code.
 - The whole-file `age` format is supported too, for payloads that are not
   structured. It has no shape: without the key there is nothing to show.
+- The tool reads chezmoi's own configuration, so there is nothing to
+  configure twice.
 
 ### The binary is large
 
@@ -119,11 +217,32 @@ about 41 MB, so the tool is in the same ballpark as the tools it sits
 between. Writing the sops file format by hand would avoid the SDKs, at
 the cost of a reimplementation that has to track the format exactly.
 
+## Troubleshooting
+
+**`chezmoi init` fails with `executable file not found in $PATH`.**
+The tool is not installed, or not on the `PATH` of the shell that runs
+chezmoi. See [the section at the top](#before-you-start-install-the-tool-before-chezmoi-init).
+
+**`chezmoi init` fails with `chezmoi-sops: command not found`.**
+Same problem, different shell. Check `which chezmoi-sops` in the shell that
+runs chezmoi.
+
+**`chezmoi sops doctor` reports no identity.**
+No age private key was found. Restore an authorised key to
+`~/.config/sops/age/keys.txt` (or `~/.age/key.txt`), or point chezmoi's
+`[age] identity` at it.
+
+**A group is reported as `not-authorized`.**
+This machine is not a recipient of that group, or the payload was not
+re-encrypted after the recipients list changed. The secrets of that group
+stay unavailable here — but the templates still render, with empty values,
+because the key names are readable without the key.
+
 ## Status
 
-Phases 1 and 2 are done: the group management commands and the data
-provider. See [PLAN.md](PLAN.md) for the implementation plan and what is
-left.
+Phases 1 to 3 are done: the group management commands, the data provider
+and the release engineering. See [PLAN.md](PLAN.md) for the implementation
+plan and what is left.
 
 ## Licence
 
