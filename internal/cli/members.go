@@ -2,27 +2,102 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/derphilipp/chezmoi-sops/internal/access"
+	"github.com/derphilipp/chezmoi-sops/internal/groups"
+	"github.com/derphilipp/chezmoi-sops/internal/payload"
 	"github.com/spf13/cobra"
 )
 
+func newKeysCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "keys <machine> [agekey ...]",
+		Short: "Show or set the age keys of a machine",
+		Long: `Show or set the age keys of a machine.
+
+Without a key, the current keys are listed. With keys, they are replaced.
+
+A machine may have more than one key, for example one for the native
+system and one for a virtual machine.
+
+Changing the keys does not re-encrypt the payloads of the groups the
+machine is in. Run "chezmoi sops members" afterwards, or edit the groups
+by hand.`,
+		Args: cobra.MinimumNArgs(1),
+		RunE: runKeys,
+	}
+	addJSONFlag(cmd)
+	return cmd
+}
+
+func runKeys(cmd *cobra.Command, args []string) error {
+	name := args[0]
+	keys := args[1:]
+
+	environment, err := resolve()
+	if err != nil {
+		return err
+	}
+
+	host, ok := environment.Layout.Access.Host(name)
+	if !ok {
+		return fail("The host %q does not exist.", name)
+	}
+
+	if len(keys) == 0 {
+		if jsonRequested(cmd) {
+			return printJSON(jsonOutput{
+				Command: "keys",
+				OK:      true,
+				Hosts: []jsonHost{{
+					Host:   host.Hostname(),
+					Key:    strings.Join(host.Age, ", "),
+					Groups: environment.groupsOfHost(name),
+				}},
+			})
+		}
+		fmt.Printf("%s\n", host.Hostname())
+		for _, key := range host.Age {
+			fmt.Printf("    %s\n", key)
+		}
+		return nil
+	}
+
+	if err := environment.setHostKeys(name, keys); err != nil {
+		return fail("%s", err)
+	}
+
+	if jsonRequested(cmd) {
+		return printJSON(jsonOutput{
+			Command: "keys",
+			OK:      true,
+			Message: fmt.Sprintf("The machine %q has %d key(s) now.", name, len(keys)),
+		})
+	}
+
+	fmt.Printf("The machine %q has %d key(s) now.\n", name, len(keys))
+	fmt.Println("Re-encrypt the groups it is in so the new keys can read them: chezmoi sops members <group>")
+	return nil
+}
+
 func newMembersCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "members <group> [host ...]",
-		Short: "Show or change the hosts that may read a group",
-		Long: `Show or change the hosts that may read a group.
+		Use:   "members <group> [machine ...]",
+		Short: "Show or change the machines that may read a group",
+		Long: `Show or change the machines that may read a group.
 
-Without a host, the current members are listed. With hosts, they are
+Without a machine, the current members are listed. With machines, they are
 replaced by the given ones.
 
 The members decide who may read the group: the recipients of its payloads
 are the age keys of its members. Adding a member therefore means
-re-encrypting the payloads for that key.`,
+re-encrypting the payloads for that key, which this command does.`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: runMembers,
 	}
+	cmd.Flags().Bool("no-reencrypt", false, "do not re-encrypt the payloads of the group")
 	addJSONFlag(cmd)
 	return cmd
 }
@@ -30,6 +105,7 @@ re-encrypting the payloads for that key.`,
 func runMembers(cmd *cobra.Command, args []string) error {
 	name := args[0]
 	members := args[1:]
+	noReencrypt, _ := cmd.Flags().GetBool("no-reencrypt")
 
 	environment, err := resolve()
 	if err != nil {
@@ -49,7 +125,7 @@ func runMembers(cmd *cobra.Command, args []string) error {
 				Groups: []jsonGroup{{
 					Name:       group.Name,
 					Hosts:      group.Members,
-					Recipients: environment.Layout.Groups[groupIndex(environment, name)].Recipients,
+					Recipients: environment.recipientsOf(group.Name),
 				}},
 			})
 		}
@@ -67,6 +143,23 @@ func runMembers(cmd *cobra.Command, args []string) error {
 		return fail("%s", err)
 	}
 
+	// The payloads are encrypted for the old members, so the new ones
+	// cannot read them until they are encrypted again. The recipients come
+	// from the file that was just written, not from the layout that was
+	// read before the change.
+	recipients, err := environment.newRecipients(name)
+	if err != nil {
+		return fail("%s", err)
+	}
+
+	reencrypted := false
+	if !noReencrypt {
+		reencrypted, err = environment.reencryptGroup(name, recipients)
+		if err != nil {
+			return fail("%s", err)
+		}
+	}
+
 	if jsonRequested(cmd) {
 		return printJSON(jsonOutput{
 			Command: "members",
@@ -76,29 +169,78 @@ func runMembers(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("The group %q is now read by %s.\n", name, strings.Join(members, ", "))
-	fmt.Println("Re-encrypt its payloads so the new members can read them: chezmoi sops edit group/" + name)
+	switch {
+	case reencrypted:
+		fmt.Println("Its payloads were encrypted again for the new members.")
+	case noReencrypt:
+		fmt.Println("Its payloads were not encrypted again, so the new members cannot read them yet.")
+	default:
+		fmt.Println("Its payloads could not be encrypted again, so the new members cannot read them yet.")
+		fmt.Println("Run 'chezmoi sops edit group/" + name + "' to encrypt them again.")
+	}
 	return nil
 }
 
-// groupIndex returns the position of a group in the layout.
-func groupIndex(environment *env, name string) int {
-	for i, group := range environment.Layout.Groups {
+// recipientsOf returns the age public keys of a group.
+func (e *env) recipientsOf(name string) []string {
+	for _, group := range e.Layout.Groups {
 		if group.Name == name {
-			return i
+			return group.Recipients
 		}
 	}
-	return 0
+	return nil
 }
 
-// setMembers replaces the members of a group.
-func (e *env) setMembers(name string, members []string) error {
-	return e.rewriteAccess(func(file *access.File) {
-		for i, group := range file.Groups {
-			if group.Name == name {
-				file.Groups[i].Members = members
-			}
+// reencryptGroup encrypts the payloads of a group again, for its current
+// members.
+//
+// It reports whether the payloads were encrypted: a group whose payloads
+// cannot be decrypted - because this machine is not a recipient, or because
+// there is no identity - cannot be encrypted again either.
+func (e *env) reencryptGroup(name string, recipients []string) (bool, error) {
+	var group groups.Group
+	found := false
+	for _, candidate := range e.Layout.Groups {
+		if candidate.Name == name {
+			group = candidate
+			found = true
+			break
 		}
-	})
+	}
+	if !found {
+		return false, fmt.Errorf("the group %q does not exist", name)
+	}
+
+	files, err := groups.Payloads(group.Dir)
+	if err != nil {
+		return false, err
+	}
+	if len(files) == 0 {
+		// A group without a payload has nothing to encrypt.
+		return true, nil
+	}
+
+	if len(e.Identities) == 0 {
+		return false, nil
+	}
+
+	for _, file := range files {
+		values, err := e.decrypt([]string{file})
+		if err != nil {
+			return false, fmt.Errorf("the payload %s could not be decrypted, so it was not "+
+				"encrypted again: %w", file, err)
+		}
+
+		encrypted, err := formatOf(file).Encrypt(ctx(), payload.Document(values), recipients)
+		if err != nil {
+			return false, fmt.Errorf("the payload %s could not be encrypted: %w", file, err)
+		}
+		if err := os.WriteFile(file, encrypted, 0o600); err != nil {
+			return false, fmt.Errorf("writing %s: %w", file, err)
+		}
+	}
+
+	return true, nil
 }
 
 func newHostsCmd() *cobra.Command {

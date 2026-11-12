@@ -57,6 +57,13 @@ type File struct {
 	// The order matters: the groups are merged in this order, and the
 	// first one that holds a value wins.
 	Groups []Group
+
+	// document is the parsed file. It is kept so the file can be edited
+	// without losing the comments in it.
+	document *yaml.Node
+
+	// root is the top-level mapping of the document.
+	root *yaml.Node
 }
 
 // Host returns the host with the given name.
@@ -67,6 +74,27 @@ func (f *File) Host(name string) (Host, bool) {
 		}
 	}
 	return Host{}, false
+}
+
+// RecipientsOf returns the age public keys a group is encrypted for.
+//
+// They are the keys of the members of the group, so a key is only ever
+// written once.
+func (f *File) RecipientsOf(name string) []string {
+	group, ok := f.Group(name)
+	if !ok {
+		return nil
+	}
+
+	var recipients []string
+	for _, member := range group.Members {
+		host, ok := f.Host(member)
+		if !ok {
+			continue
+		}
+		recipients = append(recipients, host.Age...)
+	}
+	return recipients
 }
 
 // Group returns the group with the given name.
@@ -129,6 +157,9 @@ func Load(path string) (*File, error) {
 	if err := file.validate(); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
+
+	file.document = &document
+	file.root = root
 	return file, nil
 }
 

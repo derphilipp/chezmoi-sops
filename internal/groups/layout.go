@@ -140,13 +140,15 @@ func (l Layout) checkForgotten(dir string) error {
 			case HostsDir:
 				if _, ok := l.Access.Host(entry.Name()); !ok {
 					return fmt.Errorf("the directory %s/%s has no entry in %s: "+
-						"every host needs a name and its keys",
+						"every host needs a name and its keys. If the machine was "+
+						"renamed, rename the directory as well",
 						kind, entry.Name(), access.FileName)
 				}
 			case GroupsDir:
 				if _, ok := l.Access.Group(entry.Name()); !ok {
 					return fmt.Errorf("the directory %s/%s has no entry in %s: "+
-						"every group needs its members",
+						"every group needs its members. If the group was renamed, "+
+						"rename the directory as well",
 						kind, entry.Name(), access.FileName)
 				}
 			}

@@ -78,7 +78,7 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 	}
 
 	// Write the access file.
-	if err := writeAccess(file.Path, file); err != nil {
+	if err := writeAccessFile(file); err != nil {
 		return fail("Writing %s: %s", file.Path, err)
 	}
 
@@ -251,6 +251,49 @@ func payloadSuffix(path string) string {
 		return ".sops.yaml"
 	}
 	return ".age"
+}
+
+// writeAccessFile writes a new access file.
+//
+// The file is written from scratch, because the old layout has no comments
+// worth keeping and no order worth preserving: the groups are written in
+// the order they were migrated in.
+func writeAccessFile(file *access.File) error {
+	var out strings.Builder
+
+	out.WriteString("# The machines that have an age identity, and the groups of secrets\n")
+	out.WriteString("# they may read.\n")
+	out.WriteString("#\n")
+	out.WriteString("# The order matters: the groups are merged in this order, and the first\n")
+	out.WriteString("# one that holds a value wins.\n")
+
+	out.WriteString("hosts:\n")
+	for _, host := range file.Hosts {
+		fmt.Fprintf(&out, "  %s:\n", host.Name)
+		if host.Label != "" {
+			fmt.Fprintf(&out, "    label: %q\n", host.Label)
+		}
+		if len(host.Hostnames) > 0 {
+			out.WriteString("    hostnames:\n")
+			for _, hostname := range host.Hostnames {
+				fmt.Fprintf(&out, "      - %s\n", hostname)
+			}
+		}
+		out.WriteString("    age:\n")
+		for _, key := range host.Age {
+			fmt.Fprintf(&out, "      - %s\n", key)
+		}
+	}
+
+	out.WriteString("groups:\n")
+	for _, group := range file.Groups {
+		fmt.Fprintf(&out, "  %s:\n", group.Name)
+		for _, member := range group.Members {
+			fmt.Fprintf(&out, "    - %s\n", member)
+		}
+	}
+
+	return os.WriteFile(file.Path, []byte(out.String()), 0o600)
 }
 
 // sortedKeys returns the keys of a map in sorted order.

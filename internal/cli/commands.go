@@ -57,6 +57,15 @@ func runEdit(cmd *cobra.Command, args []string) error {
 		return fail("%s", err)
 	}
 
+	// A group or a machine may have no payloads yet. Its directory is
+	// created here, so the first payload has a place to go.
+	if dir == "" {
+		dir = filepath.Join(environment.secretsDir(), target.Kind+"s", target.Name)
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return fail("Creating %s: %s", dir, err)
+		}
+	}
+
 	files, err := groups.Payloads(dir)
 	if err != nil {
 		return fail("%s", err)
@@ -66,7 +75,9 @@ func runEdit(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(files) == 0 {
-		return fail("There is nothing to edit in %s.", target)
+		// A group without a payload is a group that has just been
+		// created: the first payload is created here.
+		files = []string{filepath.Join(dir, target.Name+".sops.yaml")}
 	}
 
 	for _, file := range files {
@@ -238,15 +249,28 @@ func runNew(cmd *cobra.Command, args []string) error {
 	members := args[1:]
 
 	if isHost {
+		// The machine needs its keys: without them it could not read
+		// anything.
+		keys := members
+		if len(keys) == 0 {
+			return fail("A machine needs at least one age key: chezmoi sops new --host %s age1...", name)
+		}
 		if _, ok := environment.Layout.Access.Host(name); ok {
 			return fail("The host %q already exists.", name)
 		}
+
+		// The access file is written first: a directory without an entry
+		// in it is a state the tool refuses to read.
+		if err := environment.addHost(name, keys); err != nil {
+			return fail("%s", err)
+		}
+
 		dir := filepath.Join(environment.secretsDir(), groups.HostsDir, name)
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return fail("Creating %s: %s", dir, err)
 		}
 		if !jsonRequested(cmd) {
-			fmt.Printf("Created the directory of the host %q: %s\n", name, dir)
+			fmt.Printf("Created the host %q: %s\n", name, dir)
 		}
 		return nil
 	}
@@ -255,15 +279,14 @@ func runNew(cmd *cobra.Command, args []string) error {
 		return fail("The group %q already exists.", name)
 	}
 
+	// The access file is written first, for the same reason.
+	if err := environment.addGroup(name, members); err != nil {
+		return fail("%s", err)
+	}
+
 	dir := filepath.Join(environment.secretsDir(), groups.GroupsDir, name)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fail("Creating %s: %s", dir, err)
-	}
-
-	// The group has to be in the access file, otherwise it would have no
-	// readers and the tool would refuse to start.
-	if err := environment.addGroup(name, members); err != nil {
-		return fail("%s", err)
 	}
 
 	if !jsonRequested(cmd) {
