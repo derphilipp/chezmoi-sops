@@ -400,6 +400,23 @@ T2.2 and T2.3 belong to the dotfiles repo, which is a separate decision
 - [ ] `chezmoi sops doctor` — report the identity in use, the groups found,
       which ones decrypt, and why not the others
 
+## A gotcha worth knowing: `chezmoi init` writes to the default config
+
+`chezmoi init` writes the rendered configuration to the *default* config
+path, even when `--source` points somewhere else. A test that runs
+`chezmoi init --source /tmp/test` therefore overwrites
+`~/.config/chezmoi/chezmoi.toml` with the test's configuration.
+
+The isolation flag is `--config-path`:
+
+```sh
+chezmoi --source /tmp/test --config-path /tmp/test/chezmoi.toml init
+```
+
+This cost an afternoon of debugging a "mysterious" mismatch between the
+tool and chezmoi. The tool itself is not affected — it reads
+`CHEZMOI_SOURCE_DIR`, which chezmoi sets for the invocation it belongs to.
+
 ## Testing strategy
 
 **Unit** — merge/flatten semantics, shape extraction, identity discovery,
