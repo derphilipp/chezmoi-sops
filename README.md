@@ -41,7 +41,7 @@ every machine installs and updates it:
 
 ```toml
 [tools]
-"github:derphilipp/chezmoi-sops" = "0.1.0"
+chezmoi-sops = "go:github.com/derphilipp/chezmoi-sops/cmd/chezmoi-sops@latest"
 ```
 
 That covers every machine *after* its first initialisation — the mise
@@ -73,13 +73,33 @@ one binary, for every platform.
 
 ## Why groups
 
-A **group** is a set of recipients plus a payload:
+The secrets live in a directory tree that carries the access control:
 
 ```
 .secrets/
-  default.recipients.txt   the age public keys allowed to decrypt the group
-  default.sops.yaml        the payload, sops encrypted
+  access.yaml                   the machines and the groups
+  groups/<group>/<file>         readable by the members of the group
+  hosts/<host>/<file>           readable by that machine alone
 ```
+
+`access.yaml` is the only place the access control is written down:
+
+```yaml
+hosts:
+  laura:
+    age: [age1...]
+  leela:
+    age: [age1...]
+
+groups:
+  common: [laura, leela]
+  home: [laura]
+```
+
+The recipients of a group are **derived from its members**, so a public key
+is only ever written once. Adding a machine is one edit to this file, and
+forgetting one is impossible — a group cannot name a machine that does not
+exist.
 
 Because sops encrypts only the values, the key names stay readable in the
 repository:
@@ -90,32 +110,34 @@ database:
     host: ENC[AES256_GCM,data:...,iv:...,tag:...,type:str]
 ```
 
-And because the *shape* is readable, a machine that is not a recipient of a
-group still knows which secrets exist — it just sees empty values. Templates
-therefore render everywhere instead of failing on one machine.
+And because the *shape* is readable, a machine that is not a member of a
+group still knows which secrets exist — it just sees empty values.
+Templates therefore render everywhere instead of failing on one machine.
 
-Each group has its own recipient list, so a machine can read the groups it
-is allowed to read and only those.
+Adding a secret is adding a file. There is no configuration change at all.
+
+The order of the groups in `access.yaml` is the merge order, and the first
+group that holds a value wins.
 
 ## Install
 
 With [mise](https://mise.jdx.dev):
 
 ```sh
-mise install github:derphilipp/chezmoi-sops@0.1.0
+mise install github:derphilipp/chezmoi-sops@0.2.0
 ```
 
 With Go:
 
 ```sh
-go install github.com/derphilipp/chezmoi-sops/cmd/chezmoi-sops@v0.1.0
+go install github.com/derphilipp/chezmoi-sops/cmd/chezmoi-sops@v0.2.0
 ```
 
 > **A note on `@latest` with mise.** mise hides releases that are younger
 > than its `minimum_release_age` setting (24 hours by default), so
 > `mise install github:derphilipp/chezmoi-sops` — without a version — will
 > not find a release published in the last day. Pin the version, as above,
-> or use `mise install github:derphilipp/chezmoi-sops@0.1.0` to install a
+> or use `mise install github:derphilipp/chezmoi-sops@0.2.0` to install a
 > fresh release straight away. `go install ...@latest` is not affected.
 
 Either way, verify that the shell that runs `chezmoi` can find it:
@@ -259,10 +281,15 @@ No age private key was found. Restore an authorised key to
 `[age] identity` at it.
 
 **A group is reported as `not-authorized`.**
-This machine is not a recipient of that group, or the payload was not
-re-encrypted after the recipients list changed. The secrets of that group
-stay unavailable here — but the templates still render, with empty values,
+This machine is not a member of that group, or the payload was not
+re-encrypted after the members changed. The secrets of that group stay
+unavailable here — but the templates still render, with empty values,
 because the key names are readable without the key.
+
+**`the directory groups/<name> has no entry in access.yaml`.**
+A directory without an entry in the access file would be readable by
+nobody or by everybody, and neither is ever meant. Add the group to
+`access.yaml`, or remove the directory.
 
 ## Status
 
