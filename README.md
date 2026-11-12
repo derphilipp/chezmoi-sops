@@ -146,13 +146,19 @@ It runs as a [chezmoi plugin](https://www.chezmoi.io/reference/plugins/): with
 `chezmoi-sops` on your `PATH`, `chezmoi sops ...` runs it.
 
 ```sh
-chezmoi sops groups              # who is in which group
-chezmoi sops new work age1...     # create a group
-chezmoi sops edit private         # decrypt, edit, re-encrypt
-chezmoi sops delete work          # remove a group
-chezmoi sops data                 # the merged secrets, as JSON
-chezmoi sops doctor               # what works and what does not
+chezmoi sops groups                  # the groups, the machines, and who can read what
+chezmoi sops hosts                   # the machines and their keys
+chezmoi sops new work                 # create a group
+chezmoi sops members work laura leela # who may read a group
+chezmoi sops edit group/work          # decrypt, edit, re-encrypt
+chezmoi sops edit host/laura          # the secrets of one machine
+chezmoi sops delete group/work        # remove a group
+chezmoi sops data                     # the merged secrets, as JSON
+chezmoi sops doctor                   # what works and what does not
 ```
+
+The order of the groups in the access file is the merge order, and the first
+group that holds a value wins.
 
 Every command takes `--json` for machine-readable output.
 
