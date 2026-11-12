@@ -92,6 +92,12 @@ func (e Editor) Edit(ctx context.Context, path string, opts Options) (Result, er
 						"Use --force to overwrite the payload anyway: %w", path, err)
 			}
 			existing = mustMarshal(decrypted)
+		} else {
+			// The payload is overwritten, but the old one is still a sops
+			// document, so its metadata has to be stripped before it can be
+			// edited. What is left are the key names of the old secrets,
+			// which is the useful part of the shape.
+			existing = stripMetadata(opts.Format, existing)
 		}
 	case os.IsNotExist(err):
 		result.Created = true
@@ -175,6 +181,26 @@ func mustParse(raw []byte) payload.Document {
 		return payload.Document{}
 	}
 	return doc
+}
+
+// stripMetadata removes the sops metadata from a payload, so an encrypted
+// document can be edited as a plain one.
+//
+// For the sops format this leaves the key names with their encrypted values
+// replaced by nothing, which is the shape of the group. For the age format
+// there is nothing to strip: the document is one opaque blob, so it is
+// replaced by an empty document.
+func stripMetadata(format payload.Payload, raw []byte) []byte {
+	shape, err := format.Shape(raw)
+	if err != nil {
+		return DefaultTemplate
+	}
+
+	out, err := payload.Marshal(shape)
+	if err != nil {
+		return DefaultTemplate
+	}
+	return out
 }
 
 // isEmpty reports whether the content has nothing but comments and blank
