@@ -95,5 +95,8 @@ func init() {
 		newDeleteCmd(),
 		newDataCmd(),
 		newDoctorCmd(),
+		newMembersCmd(),
+		newHostsCmd(),
+		newMigrateCmd(),
 	)
 }

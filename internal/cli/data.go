@@ -15,13 +15,13 @@ func newDataCmd() *cobra.Command {
 		Short: "Print the merged secrets for the chezmoi templates",
 		Long: `Print the merged secrets for the chezmoi templates.
 
-The groups are merged in a fixed order: "default" first, then the others
-alphabetically. The first group wins a conflict, and the conflict is
-reported.
+The groups are merged in the order of the access file, then the hosts. The
+first source that holds a value wins, and the conflict is reported.
 
 A group this machine cannot decrypt still contributes its shape: the key
 names with empty values. A template therefore never fails just because a
-secret is unavailable, it renders empty instead.
+secret is unavailable, it renders empty instead. The secrets of a host are
+for that machine alone, so they contribute nothing to any other machine.
 
 The output is a JSON object:
 
@@ -56,25 +56,29 @@ func runData(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	sources := environment.sources()
+
 	if !quiet {
 		if len(environment.Identities) == 0 {
 			fmt.Fprintln(os.Stderr,
-				"Warning: no age identity was found, so no group could be decrypted. "+
+				"Warning: no age identity was found, so nothing could be decrypted. "+
 					"Restore an authorized key, or run 'chezmoi sops doctor' to see what was looked at.")
 		}
 		for _, warning := range result.Warnings {
 			fmt.Fprintf(os.Stderr, "Warning: %s\n", warning)
 		}
-		for name, status := range result.Status {
-			if status.Available {
+		for _, source := range sources {
+			if source.Kind != groups.KindGroup || source.Available {
 				continue
 			}
 			fmt.Fprintf(os.Stderr,
 				"Warning: the secrets of group %q are not available here (%s). "+
 					"This machine is not a recipient of that group, or the payload was "+
-					"not re-encrypted after the recipients list changed.\n", name, status.Reason)
+					"not re-encrypted after the recipients list changed.\n", source.Name, source.Reason)
 		}
 	}
+
+	available, reason := environment.statusOf(sources)
 
 	output := map[string]any{
 		// The merged tree: the values this machine can read, with the
@@ -84,7 +88,7 @@ func runData(cmd *cobra.Command, args []string) error {
 		"secretsEnv": result.Flat,
 		// The values of each group, before they were merged.
 		"secretGroups": result.GroupValues,
-		"secretStatus": statusDocument(result),
+		"secretStatus": statusDocument(result, available, reason),
 	}
 
 	encoded, err := json.MarshalIndent(output, "", "  ")
@@ -97,93 +101,25 @@ func runData(cmd *cobra.Command, args []string) error {
 }
 
 // statusDocument builds the status part of the output.
-func statusDocument(result *groups.Result) map[string]any {
+//
+// The top level mirrors the first group, which is the most general one: it
+// holds the secrets every machine is meant to have, so its status is the
+// status of the whole set.
+func statusDocument(result *groups.Result, available bool, reason string) map[string]any {
 	groupStatus := map[string]any{}
 	for name, status := range result.Status {
 		groupStatus[name] = map[string]any{
 			"available":      status.Available,
 			"reason":         status.Reason,
 			"format":         status.Format,
-			"recipientsFile": status.RecipientsFile,
-			"payload":        status.Payload,
-		}
-	}
-
-	// The top level mirrors the "default" group, which is the one the
-	// templates look at: the default group holds the secrets every machine
-	// is meant to have, so its status is the status of the whole set.
-	defaultStatus, ok := result.Status["default"]
-	if !ok {
-		defaultStatus = groups.Status{
-			Available: false,
-			Reason:    groups.ReasonNoIdentity,
+			"payloads":       status.Payloads,
+			"recipientsFile": status.Recipients,
 		}
 	}
 
 	return map[string]any{
-		"available": defaultStatus.Available,
-		"reason":    defaultStatus.Reason,
+		"available": available,
+		"reason":    reason,
 		"groups":    groupStatus,
 	}
-}
-
-// merge decrypts every group it can and merges them.
-func (e *env) merge() (*groups.Result, error) {
-	values := map[string]map[string]any{}
-	status := map[string]groups.Status{}
-
-	for _, group := range e.Registry.Groups {
-		groupStatus := groups.Status{
-			Group:          group.Name,
-			Format:         formatOf(group),
-			RecipientsFile: group.RecipientsPath,
-			Payload:        group.PayloadPath,
-		}
-
-		if len(e.Identities) == 0 {
-			groupStatus.Reason = groups.ReasonNoIdentity
-			status[group.Name] = groupStatus
-			values[group.Name] = e.shapeOf(group)
-			continue
-		}
-
-		raw, err := os.ReadFile(group.PayloadPath)
-		if err != nil {
-			groupStatus.Reason = groups.ReasonMissing
-			status[group.Name] = groupStatus
-			values[group.Name] = e.shapeOf(group)
-			continue
-		}
-
-		decrypted, err := group.Format.Decrypt(cmdContext(), raw, e.Identities)
-		if err != nil {
-			groupStatus.Reason = groups.ReasonNotAuthorized
-			status[group.Name] = groupStatus
-			values[group.Name] = e.shapeOf(group)
-			continue
-		}
-
-		groupStatus.Available = true
-		groupStatus.Reason = groups.ReasonAvailable
-		status[group.Name] = groupStatus
-		values[group.Name] = map[string]any(decrypted)
-	}
-
-	return groups.Merge(e.Registry, values, status), nil
-}
-
-// shapeOf returns the shape of a group: the key names with empty values.
-func (e *env) shapeOf(group groups.Group) map[string]any {
-	raw, err := os.ReadFile(group.PayloadPath)
-	if err != nil {
-		return nil
-	}
-
-	shape, err := group.Format.Shape(raw)
-	if err != nil {
-		// The age format has no shape: without the key there is nothing
-		// to show.
-		return nil
-	}
-	return map[string]any(shape)
 }

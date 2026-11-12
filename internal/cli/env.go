@@ -1,9 +1,9 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/derphilipp/chezmoi-sops/internal/chezmoi"
 	"github.com/derphilipp/chezmoi-sops/internal/groups"
@@ -12,19 +12,29 @@ import (
 )
 
 // env is the resolved environment of a command: the chezmoi configuration,
-// the groups, and the identity.
+// the layout of the secrets, and the identity.
 type env struct {
 	// Config is the chezmoi configuration.
 	Config chezmoi.Config
 
-	// Registry is the groups that were found.
-	Registry groups.Registry
+	// Layout is the layout of the secrets directory.
+	Layout groups.Layout
 
 	// Identities are the age identities of this machine.
 	Identities []payload.Identity
 }
 
-// resolve reads the chezmoi configuration and finds the groups and the
+// ctx returns the context of the current command.
+func ctx() context.Context {
+	return context.Background()
+}
+
+// secretsDir returns the directory the secrets live in.
+func (e *env) secretsDir() string {
+	return e.Config.SecretsDir()
+}
+
+// resolve reads the chezmoi configuration and finds the layout and the
 // identity.
 func resolve() (*env, error) {
 	config, err := chezmoi.Load()
@@ -36,7 +46,7 @@ func resolve() (*env, error) {
 		config.SourceDir = flagSourceDir
 	}
 
-	registry, err := groups.Discover(config.SecretsDir())
+	layout, err := groups.Discover(config.SecretsDir())
 	if err != nil {
 		return nil, err
 	}
@@ -54,45 +64,196 @@ func resolve() (*env, error) {
 
 	return &env{
 		Config:     config,
-		Registry:   registry,
+		Layout:     layout,
 		Identities: identities,
 	}, nil
 }
 
-// recipientsFor returns the recipients of a group.
+// sources builds the merge sources: the groups in the order of the access
+// file, then the hosts in the order of the access file.
 //
-// The group's own recipients file is the source of truth. The --recipients
-// flag overrides it, which is what the recipient registry lookup uses.
-func (e *env) recipientsFor(group groups.Group) ([]string, error) {
-	path := group.RecipientsPath
-	if flagRecipients != "" {
-		path = flagRecipients
+// The order decides which value wins when two of them hold the same key.
+func (e *env) sources() []groups.Source {
+	var sources []groups.Source
+
+	for _, group := range e.Layout.Groups {
+		sources = append(sources, e.source(groups.KindGroup, group.Name, group.Dir, group.Recipients, true))
 	}
 
-	recipients, err := keyring.Recipients(path)
+	for _, host := range e.Layout.Hosts {
+		sources = append(sources, e.source(groups.KindHost, host.Name, host.Dir, host.Age, false))
+	}
+
+	return sources
+}
+
+// source builds one merge source and decrypts it if it can.
+func (e *env) source(kind, name, dir string, recipients []string, contributesShape bool) groups.Source {
+	source := groups.Source{
+		Kind:             kind,
+		Name:             name,
+		Recipients:       recipients,
+		ContributesShape: contributesShape,
+	}
+
+	files, err := groups.Payloads(dir)
 	if err != nil {
-		return nil, fmt.Errorf("reading the recipients of group %q: %w", group.Name, err)
+		source.Reason = groups.ReasonMissing
+		return source
 	}
-	if len(recipients) == 0 {
-		return nil, fmt.Errorf("group %q has no recipients", group.Name)
+	source.Files = files
+
+	if len(files) == 0 {
+		// A source without files is empty, not unreadable.
+		source.Available = true
+		source.Reason = groups.ReasonAvailable
+		source.Values = map[string]any{}
+		return source
 	}
-	return recipients, nil
+
+	source.Format = groups.FormatOf(files[0])
+
+	if len(e.Identities) == 0 {
+		source.Reason = groups.ReasonNoIdentity
+		source.Shape = e.shapeOf(files)
+		return source
+	}
+
+	values, err := e.decrypt(files)
+	if err != nil {
+		source.Reason = groups.ReasonNotAuthorized
+		source.Shape = e.shapeOf(files)
+		return source
+	}
+
+	source.Available = true
+	source.Reason = groups.ReasonAvailable
+	source.Values = values
+	return source
 }
 
-// payloadPath returns the path of the payload of a group in the given format.
-func payloadPath(dir, name, format string) string {
-	if format == "age" {
-		return filepath.Join(dir, name+groups.AgePayloadSuffix)
+// decrypt decrypts the payload files of a source and merges them.
+//
+// The files are merged in alphabetical order, so the first one that holds a
+// value wins.
+func (e *env) decrypt(files []string) (map[string]any, error) {
+	merged := map[string]any{}
+
+	for _, file := range files {
+		raw, err := os.ReadFile(file)
+		if err != nil {
+			return nil, err
+		}
+
+		values, err := formatOf(file).Decrypt(ctx(), raw, e.Identities)
+		if err != nil {
+			return nil, err
+		}
+
+		merged = mergeDocuments(merged, map[string]any(values))
 	}
-	return filepath.Join(dir, name+groups.SOPSPayloadSuffix)
+
+	return merged, nil
 }
 
-// formatOf returns the payload format of a group.
-func formatOf(group groups.Group) string {
-	if group.Format == nil {
-		return "sops"
+// shapeOf returns the shape of the payload files: the key names with empty
+// values.
+func (e *env) shapeOf(files []string) map[string]any {
+	shape := map[string]any{}
+
+	for _, file := range files {
+		raw, err := os.ReadFile(file)
+		if err != nil {
+			continue
+		}
+
+		values, err := formatOf(file).Shape(raw)
+		if err != nil {
+			// The age format has no shape: without the key there is
+			// nothing to show.
+			continue
+		}
+		shape = mergeDocuments(shape, map[string]any(values))
 	}
-	return group.Format.Name()
+
+	return shape
+}
+
+// formatOf returns the payload format of a file.
+func formatOf(path string) payload.Payload {
+	if groups.FormatOf(path) == "age" {
+		return payload.NewAge()
+	}
+	return payload.NewSOPS()
+}
+
+// mergeDocuments merges src into dst. The values of dst win.
+func mergeDocuments(dst, src map[string]any) map[string]any {
+	for key, srcValue := range src {
+		dstValue, ok := dst[key]
+		if !ok {
+			dst[key] = srcValue
+			continue
+		}
+
+		srcMap, srcIsMap := payload.AsMap(srcValue)
+		dstMap, dstIsMap := payload.AsMap(dstValue)
+		if srcIsMap && dstIsMap {
+			dst[key] = mergeDocuments(dstMap, srcMap)
+		}
+	}
+	return dst
+}
+
+// merge decrypts every source it can and merges them.
+func (e *env) merge() (*groups.Result, error) {
+	sources := e.sources()
+	result := groups.Merge(sources)
+
+	for _, source := range sources {
+		if source.Kind != groups.KindGroup {
+			continue
+		}
+		result.Status[source.Name] = groups.Status{
+			Kind:       source.Kind,
+			Name:       source.Name,
+			Available:  source.Available,
+			Reason:     source.Reason,
+			Format:     source.Format,
+			Payloads:   source.Files,
+			Recipients: source.Recipients,
+		}
+	}
+
+	return result, nil
+}
+
+// statusOf returns the availability of the first group, which decides
+// whether the secrets are available at all.
+//
+// The first group is the most general one: it holds the secrets every
+// machine is meant to have.
+func (e *env) statusOf(sources []groups.Source) (bool, string) {
+	for _, source := range sources {
+		if source.Kind != groups.KindGroup {
+			continue
+		}
+		return source.Available, source.Reason
+	}
+	return false, groups.ReasonNoIdentity
+}
+
+// groupRecipients returns the recipients of a group.
+func (e *env) groupRecipients(name string) ([]string, error) {
+	for _, group := range e.Layout.Groups {
+		if group.Name == name {
+			if len(group.Recipients) == 0 {
+				return nil, fmt.Errorf("the group %q has no recipients", name)
+			}
+			return group.Recipients, nil
+		}
+	}
+	return nil, fmt.Errorf("the group %q does not exist", name)
 }
 
 // mustExist reports a readable file, or an error.

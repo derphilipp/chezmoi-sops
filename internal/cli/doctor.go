@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -30,182 +31,78 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	report := doctorReport{
-		Config: doctorConfig{
-			SourceDir:  environment.Config.SourceDir,
-			Identity:   environment.Config.Identity,
-			Encryption: environment.Config.Encryption,
-		},
-	}
-	report.Identities = identityPaths()
-
-	for _, group := range environment.Registry.Groups {
-		entry := doctorGroup{
-			Name:           group.Name,
-			Format:         formatOf(group),
-			RecipientsFile: group.RecipientsPath,
-			Payload:        group.PayloadPath,
-		}
-
-		recipients, err := group.Recipients()
-		if err != nil {
-			entry.Problem = fmt.Sprintf("the recipients file cannot be read: %s", err)
-		} else {
-			entry.Recipients = recipients
-		}
-
-		raw, err := os.ReadFile(group.PayloadPath)
-		switch {
-		case err != nil:
-			entry.Problem = "the payload is missing"
-		case len(environment.Identities) == 0:
-			entry.Problem = "no identity was found, so nothing can be decrypted"
-		default:
-			if _, err := group.Format.Decrypt(cmdContext(), raw, environment.Identities); err != nil {
-				entry.Problem = "the payload cannot be decrypted with the local identity"
-			} else {
-				entry.Decryptable = true
-			}
-		}
-
-		report.Groups = append(report.Groups, entry)
-	}
+	sources := environment.sources()
 
 	if jsonRequested(cmd) {
-		return printJSONDoctor(report)
+		output := jsonOutput{Command: "doctor", OK: true}
+		for _, group := range environment.Layout.Groups {
+			status := statusOfGroup(sources, group.Name)
+			output.Groups = append(output.Groups, jsonGroup{
+				Name:       group.Name,
+				Format:     status.Format,
+				Hosts:      group.Members,
+				Recipients: group.Recipients,
+			})
+		}
+		for _, host := range environment.Layout.Hosts {
+			output.Hosts = append(output.Hosts, jsonHost{
+				Host: host.Hostname(),
+				Key:  strings.Join(host.Age, ", "),
+			})
+		}
+		return printJSON(output)
 	}
 
-	printDoctor(report)
-	return nil
-}
-
-// doctorReport is the machine-readable report of the doctor command.
-type doctorReport struct {
-	// Config is the chezmoi configuration.
-	Config doctorConfig `json:"config"`
-
-	// Identities are the identity files that were looked at.
-	Identities []string `json:"identities"`
-
-	// Groups are the groups that were found.
-	Groups []doctorGroup `json:"groups"`
-}
-
-// doctorConfig is the chezmoi part of the report.
-type doctorConfig struct {
-	// SourceDir is the chezmoi source directory.
-	SourceDir string `json:"sourceDir"`
-
-	// Identity is the identity chezmoi is configured with.
-	Identity string `json:"identity"`
-
-	// Encryption is the encryption scheme chezmoi is configured with.
-	Encryption string `json:"encryption"`
-}
-
-// doctorGroup is one group in the report.
-type doctorGroup struct {
-	// Name is the name of the group.
-	Name string `json:"name"`
-
-	// Format is the payload format of the group.
-	Format string `json:"format"`
-
-	// RecipientsFile is the path of the recipients file.
-	RecipientsFile string `json:"recipientsFile"`
-
-	// Payload is the path of the encrypted payload.
-	Payload string `json:"payload"`
-
-	// Recipients are the age public keys of the group.
-	Recipients []string `json:"recipients"`
-
-	// Decryptable is true when the group can be decrypted.
-	Decryptable bool `json:"decryptable"`
-
-	// Problem explains why the group cannot be decrypted.
-	Problem string `json:"problem,omitempty"`
-}
-
-// printJSONDoctor writes the machine-readable report.
-func printJSONDoctor(report doctorReport) error {
-	output := jsonOutput{Command: "doctor", OK: true}
-	for _, group := range report.Groups {
-		output.Groups = append(output.Groups, jsonGroup{
-			Name:           group.Name,
-			Format:         group.Format,
-			RecipientsFile: group.RecipientsFile,
-			Payload:        group.Payload,
-			Recipients:     group.Recipients,
-		})
-	}
-	return printJSON(output)
-}
-
-// printDoctor writes the human-readable report.
-func printDoctor(report doctorReport) {
 	fmt.Println()
 	fmt.Println("chezmoi")
-	fmt.Printf("  source directory: %s\n", report.Config.SourceDir)
-	fmt.Printf("  encryption:       %s\n", report.Config.Encryption)
-	if report.Config.Identity == "" {
+	fmt.Printf("  source directory: %s\n", environment.Config.SourceDir)
+	fmt.Printf("  encryption:       %s\n", environment.Config.Encryption)
+	if environment.Config.Identity == "" {
 		fmt.Println("  identity:         none configured")
 	} else {
-		fmt.Printf("  identity:         %s\n", report.Config.Identity)
+		fmt.Printf("  identity:         %s\n", environment.Config.Identity)
 	}
 
 	fmt.Println()
 	fmt.Println("Identity files")
-	if len(report.Identities) == 0 {
-		fmt.Println("  none found")
+	found := false
+	for _, path := range identityPaths() {
+		found = true
+		fmt.Printf("  ✓ %s\n", path)
 	}
-	for _, path := range report.Identities {
-		mark := " "
-		if _, err := os.Stat(path); err == nil {
-			mark = "✓"
-		}
-		fmt.Printf("  %s %s\n", mark, path)
+	if !found {
+		fmt.Println("  none found")
 	}
 
 	fmt.Println()
 	fmt.Println("Secret groups")
-	if len(report.Groups) == 0 {
-		fmt.Println("  none found")
-	}
-	for _, group := range report.Groups {
+	for _, group := range environment.Layout.Groups {
+		status := statusOfGroup(sources, group.Name)
 		mark := "✗"
-		if group.Decryptable {
+		if status.Available {
 			mark = "✓"
 		}
-		fmt.Printf("  %s %-14s %-6s %d recipients", mark, group.Name, group.Format, len(group.Recipients))
-		if group.Problem != "" {
-			fmt.Printf("  (%s)", group.Problem)
+		fmt.Printf("  %s %-14s %-6s %2d hosts  %s\n",
+			mark, group.Name, status.Format, len(group.Members),
+			strings.Join(group.Members, ", "))
+		if !status.Available && status.Reason != "" {
+			fmt.Printf("      %s\n", status.Reason)
 		}
-		fmt.Println()
+	}
+
+	fmt.Println()
+	fmt.Println("Machines")
+	for _, host := range environment.Layout.Hosts {
+		readable := environment.groupsOfHost(host.Name)
+		fmt.Printf("  %-24s %s\n", host.Hostname(), strings.Join(readable, ", "))
 	}
 	fmt.Println()
+
+	return nil
 }
 
-// identityPaths returns the identity files that are looked at, and whether
-// they exist.
+// identityPaths returns the identity files that are looked at, and exist.
 func identityPaths() []string {
-	paths := identityCandidates()
-	found := make([]string, 0, len(paths))
-	seen := map[string]bool{}
-	for _, path := range paths {
-		if path == "" || seen[path] {
-			continue
-		}
-		seen[path] = true
-		if _, err := os.Stat(path); err == nil {
-			found = append(found, path)
-		}
-	}
-	return found
-}
-
-// identityCandidates returns the identity files that are looked at.
-func identityCandidates() []string {
 	var paths []string
 	if flagIdentity != "" {
 		paths = append(paths, flagIdentity)
@@ -226,5 +123,17 @@ func identityCandidates() []string {
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
 		paths = append(paths, filepath.Join(xdg, "sops", "age", "keys.txt"))
 	}
-	return paths
+
+	seen := map[string]bool{}
+	var found []string
+	for _, path := range paths {
+		if path == "" || seen[path] {
+			continue
+		}
+		seen[path] = true
+		if _, err := os.Stat(path); err == nil {
+			found = append(found, path)
+		}
+	}
+	return found
 }

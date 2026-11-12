@@ -8,129 +8,181 @@ import (
 	"github.com/derphilipp/chezmoi-sops/internal/payload"
 )
 
-// Status describes what happened to one group.
-type Status struct {
-	// Group is the name of the group.
-	Group string
-
-	// Available is true when the group could be decrypted.
-	Available bool
-
-	// Reason explains why the group is not available.
-	Reason string
-
-	// Format is the payload format of the group.
-	Format string
-
-	// RecipientsFile is the path of the recipients file.
-	RecipientsFile string
-
-	// Payload is the path of the encrypted payload.
-	Payload string
-}
-
-// Reasons for an unavailable group.
+// Kinds of sources.
 const (
-	ReasonAvailable     = "available"
-	ReasonNoIdentity    = "no-identity"
-	ReasonNotAuthorized = "not-authorized"
-	ReasonMissing       = "missing-payload"
-	ReasonNoShape       = "no-shape"
+	// KindGroup is a group of hosts that may read the same secrets.
+	KindGroup = "group"
+
+	// KindHost is a machine with its own secrets.
+	KindHost = "host"
 )
 
-// Result is the merged outcome of all groups.
+// Reasons for an unavailable source.
+const (
+	// ReasonAvailable means the source could be decrypted.
+	ReasonAvailable = "available"
+
+	// ReasonNoIdentity means there was no identity to decrypt with.
+	ReasonNoIdentity = "no-identity"
+
+	// ReasonNotAuthorized means the identity is not a recipient.
+	ReasonNotAuthorized = "not-authorized"
+
+	// ReasonMissing means the payload file is missing.
+	ReasonMissing = "missing-payload"
+)
+
+// Status describes what happened to one source.
+type Status struct {
+	// Kind is "group" or "host".
+	Kind string `json:"kind"`
+
+	// Name is the name of the group or the host.
+	Name string `json:"name"`
+
+	// Available is true when the payload could be decrypted.
+	Available bool `json:"available"`
+
+	// Reason explains why the payload could not be decrypted.
+	Reason string `json:"reason"`
+
+	// Format is the payload format of the source.
+	Format string `json:"format"`
+
+	// Payloads are the payload files of the source.
+	Payloads []string `json:"payloads"`
+
+	// Recipients are the age public keys the payloads are encrypted for.
+	Recipients []string `json:"recipients"`
+}
+
+// Source is one source of secrets: a group or a host.
+type Source struct {
+	// Kind is "group" or "host".
+	Kind string
+
+	// Name is the name of the group or the host.
+	Name string
+
+	// Files are the payload files of the source, in merge order.
+	Files []string
+
+	// Recipients are the age public keys the payloads are encrypted for.
+	Recipients []string
+
+	// Values are the decrypted values of the source.
+	Values map[string]any
+
+	// Available is true when the source could be decrypted.
+	Available bool
+
+	// Reason explains why not.
+	Reason string
+
+	// Format is the payload format of the source.
+	Format string
+
+	// Shape is the shape of the source: the key names with empty values.
+	Shape map[string]any
+
+	// ContributesShape reports whether the shape of this source is merged
+	// when the source cannot be decrypted.
+	//
+	// A group does: a machine that cannot read a group still renders the
+	// templates with empty values. A host does not: its secrets are for
+	// that machine alone, so their names belong to it alone too.
+	ContributesShape bool
+}
+
+// Result is the merged outcome of all sources.
 type Result struct {
-	// Tree is the merged document: the real values, with the shapes of the
-	// unreadable groups filling the gaps.
-	Tree map[string]any
+	// Tree is the merged document: the values this machine can read, with
+	// the shapes of the groups it cannot read filling the gaps.
+	Tree map[string]any `json:"secrets"`
 
 	// Flat is the tree flattened for the environment: the path is joined
 	// with "_" and uppercased, so database.password becomes
 	// DATABASE_PASSWORD.
-	Flat map[string]string
-
-	// Status is the per-group status.
-	Status map[string]Status
+	Flat map[string]string `json:"secretsEnv"`
 
 	// GroupValues are the values of each group, before they were merged.
-	GroupValues map[string]map[string]any
+	GroupValues map[string]map[string]any `json:"secretGroups"`
+
+	// Status is the status of each group.
+	Status map[string]Status `json:"secretStatus"`
 
 	// Warnings are the problems found while merging.
-	Warnings []string
+	Warnings []string `json:"-"`
 }
 
-// Merge combines the groups into one tree.
+// Merge combines the sources into one tree.
 //
-// The order matters and matches the behaviour of the existing template:
+// The order of the sources decides the outcome:
 //
-//   - real values are merged first, so the shape of an unreadable group can
-//     never shadow a value this machine is allowed to read,
-//   - the first group wins a conflict, and the conflict is reported.
+//   - the real values are merged first, so the shape of a group this
+//     machine cannot read can never shadow a value it can read,
+//   - within the real values, the first source that holds a value wins,
+//     and the conflict is reported.
 //
-// The groups are merged in the order of the registry: "default" first, then
-// the others alphabetically.
-func Merge(registry Registry, values map[string]map[string]any, status map[string]Status) *Result {
+// The sources are expected in merge order: the groups in the order of the
+// access file, then the hosts in the order of the access file.
+func Merge(sources []Source) *Result {
 	result := &Result{
 		Tree:        map[string]any{},
 		Flat:        map[string]string{},
-		Status:      status,
-		GroupValues: values,
+		GroupValues: map[string]map[string]any{},
+		Status:      map[string]Status{},
 	}
 
 	real := map[string]any{}
 	shape := map[string]any{}
 
-	var realGroups, shapeGroups []string
-
-	for _, group := range registry.Groups {
-		values, ok := values[group.Name]
-		if !ok {
+	// The real values first.
+	for _, source := range sources {
+		if !source.Available {
 			continue
 		}
+		real = mergeTrees(real, source.Values)
 
-		if status[group.Name].Available {
-			real = mergeTrees(real, values)
-			realGroups = append(realGroups, group.Name)
-		} else {
-			shape = mergeTrees(shape, values)
-			shapeGroups = append(shapeGroups, group.Name)
+		if source.Kind == KindGroup {
+			result.GroupValues[source.Name] = source.Values
 		}
+	}
+
+	// Then the shapes of the groups this machine cannot read.
+	for _, source := range sources {
+		if source.Available || !source.ContributesShape {
+			continue
+		}
+		shape = mergeTrees(shape, source.Shape)
 	}
 
 	result.Tree = mergeTrees(mergeTrees(map[string]any{}, real), shape)
 
-	// The environment is flattened in two passes as well: the real values
-	// first, so a shape cannot shadow them either.
+	// The environment is flattened per source, so a secret of one source
+	// does not shadow the flattened name of another.
 	flat := map[string]string{}
 	origin := map[string]string{}
 
-	for _, phase := range []struct {
-		real   bool
-		groups []string
-	}{{true, realGroups}, {false, shapeGroups}} {
-		for _, name := range phase.groups {
-			values := values[name]
-			if values == nil {
+	for _, source := range sources {
+		if !source.Available {
+			continue
+		}
+		for key, value := range flatten(source.Values) {
+			if !validEnvName(key) {
+				result.Warnings = append(result.Warnings, fmt.Sprintf(
+					"Secret %q (%s %q) does not flatten to a valid environment variable name and is skipped.",
+					key, source.Kind, source.Name))
 				continue
 			}
-			for key, value := range flatten(values) {
-				if !validEnvName(key) {
-					result.Warnings = append(result.Warnings, fmt.Sprintf(
-						"Secret %q (group %q) does not flatten to a valid environment variable name and is skipped.",
-						key, name))
-					continue
-				}
-				if _, ok := flat[key]; ok {
-					if phase.real {
-						result.Warnings = append(result.Warnings, fmt.Sprintf(
-							"Secret %q is defined in two groups (%q and %q); keeping the value from group %q.",
-							key, origin[key], name, origin[key]))
-					}
-					continue
-				}
-				flat[key] = value
-				origin[key] = name
+			if _, ok := flat[key]; ok {
+				result.Warnings = append(result.Warnings, fmt.Sprintf(
+					"Secret %q is defined in two sources (%q and %q); keeping the value from %q.",
+					key, origin[key], source.Name, origin[key]))
+				continue
 			}
+			flat[key] = value
+			origin[key] = source.Name
 		}
 	}
 
@@ -155,7 +207,7 @@ func mergeTrees(dst, src map[string]any) map[string]any {
 		if srcIsMap && dstIsMap {
 			dst[key] = mergeTrees(dstMap, srcMap)
 		}
-		// Otherwise the existing value wins, which is the "first group
+		// Otherwise the existing value wins, which is the "first source
 		// wins" rule.
 	}
 	return dst
@@ -208,8 +260,8 @@ func validEnvName(name string) bool {
 }
 
 // SortedNames returns the group names in sorted order.
-func SortedNames(registry Registry) []string {
-	names := registry.Names()
-	sort.Strings(names)
-	return names
+func SortedNames(names []string) []string {
+	sorted := append([]string{}, names...)
+	sort.Strings(sorted)
+	return sorted
 }

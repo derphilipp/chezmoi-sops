@@ -39,12 +39,6 @@ type jsonGroup struct {
 	// Format is the payload format of the group.
 	Format string `json:"format"`
 
-	// RecipientsFile is the path of the recipients file.
-	RecipientsFile string `json:"recipientsFile"`
-
-	// Payload is the path of the encrypted payload.
-	Payload string `json:"payload"`
-
 	// Hosts are the machines that can read the group.
 	Hosts []string `json:"hosts"`
 
@@ -61,7 +55,7 @@ type jsonHost struct {
 	Key string `json:"key"`
 
 	// Groups are the groups the machine can read.
-	Groups []string `json:"groups"`
+	Groups []string `json:"groups,omitempty"`
 }
 
 // printJSON writes the machine-readable output of a command.

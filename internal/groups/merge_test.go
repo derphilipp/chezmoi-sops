@@ -4,33 +4,42 @@ import (
 	"testing"
 
 	"github.com/derphilipp/chezmoi-sops/internal/groups"
+	"github.com/derphilipp/chezmoi-sops/internal/payload"
 )
+
+// source builds a readable group.
+func group(name string, values map[string]any) groups.Source {
+	return groups.Source{
+		Kind:             groups.KindGroup,
+		Name:             name,
+		Values:           values,
+		Available:        true,
+		Reason:           groups.ReasonAvailable,
+		ContributesShape: true,
+	}
+}
+
+// unreadableGroup builds a group that cannot be decrypted, with a shape.
+func unreadableGroup(name string, shape map[string]any) groups.Source {
+	return groups.Source{
+		Kind:             groups.KindGroup,
+		Name:             name,
+		Available:        false,
+		Reason:           groups.ReasonNotAuthorized,
+		Shape:            shape,
+		ContributesShape: true,
+	}
+}
 
 // TestMergeRealBeforeShape checks the rule that matters most: a shape can
 // never shadow a value the machine is allowed to read.
-//
-// The "default" group is decrypted and holds the value, the "other" group is
-// not and holds the shape of the same key.
 func TestMergeRealBeforeShape(t *testing.T) {
 	t.Parallel()
 
-	registry := groups.Registry{
-		Groups: []groups.Group{
-			{Name: "default"},
-			{Name: "other"},
-		},
-	}
-
-	values := map[string]map[string]any{
-		"default": {"TOKEN": "the real value"},
-		"other":   {"TOKEN": ""},
-	}
-	status := map[string]groups.Status{
-		"default": {Group: "default", Available: true},
-		"other":   {Group: "other", Available: false},
-	}
-
-	result := groups.Merge(registry, values, status)
+	result := groups.Merge([]groups.Source{
+		group("common", map[string]any{"TOKEN": "the real value"}),
+		unreadableGroup("other", map[string]any{"TOKEN": ""}),
+	})
 
 	if got := result.Tree["TOKEN"]; got != "the real value" {
 		t.Errorf("TOKEN = %v, want the real value", got)
@@ -40,30 +49,17 @@ func TestMergeRealBeforeShape(t *testing.T) {
 	}
 }
 
-// TestMergeFirstGroupWins checks that the first group wins a conflict.
-func TestMergeFirstGroupWins(t *testing.T) {
+// TestMergeFirstSourceWins checks that the first source wins a conflict.
+func TestMergeFirstSourceWins(t *testing.T) {
 	t.Parallel()
 
-	registry := groups.Registry{
-		Groups: []groups.Group{
-			{Name: "default"},
-			{Name: "other"},
-		},
-	}
-
-	values := map[string]map[string]any{
-		"default": {"TOKEN": "first"},
-		"other":   {"TOKEN": "second"},
-	}
-	status := map[string]groups.Status{
-		"default": {Group: "default", Available: true},
-		"other":   {Group: "other", Available: true},
-	}
-
-	result := groups.Merge(registry, values, status)
+	result := groups.Merge([]groups.Source{
+		group("common", map[string]any{"TOKEN": "first"}),
+		group("other", map[string]any{"TOKEN": "second"}),
+	})
 
 	if got := result.Tree["TOKEN"]; got != "first" {
-		t.Errorf("TOKEN = %v, want the value of the first group", got)
+		t.Errorf("TOKEN = %v, want the value of the first source", got)
 	}
 	if len(result.Warnings) != 1 {
 		t.Errorf("the conflict should be reported, got %v", result.Warnings)
@@ -71,27 +67,14 @@ func TestMergeFirstGroupWins(t *testing.T) {
 }
 
 // TestMergeShapeFillsTheGap checks that a shape contributes the keys that
-// no readable group has.
+// no readable source has.
 func TestMergeShapeFillsTheGap(t *testing.T) {
 	t.Parallel()
 
-	registry := groups.Registry{
-		Groups: []groups.Group{
-			{Name: "default"},
-			{Name: "other"},
-		},
-	}
-
-	values := map[string]map[string]any{
-		"default": {"TOKEN": "real"},
-		"other":   {"OTHER": ""},
-	}
-	status := map[string]groups.Status{
-		"default": {Group: "default", Available: true},
-		"other":   {Group: "other", Available: false},
-	}
-
-	result := groups.Merge(registry, values, status)
+	result := groups.Merge([]groups.Source{
+		group("common", map[string]any{"TOKEN": "real"}),
+		unreadableGroup("other", map[string]any{"OTHER": ""}),
+	})
 
 	if got := result.Tree["TOKEN"]; got != "real" {
 		t.Errorf("TOKEN = %v, want real", got)
@@ -101,29 +84,45 @@ func TestMergeShapeFillsTheGap(t *testing.T) {
 	}
 }
 
+// TestMergeHostShapeIsNotMerged checks that a host contributes nothing when
+// it cannot be decrypted.
+//
+// The secrets of a host are for that machine alone, so their names belong
+// to it alone too.
+func TestMergeHostShapeIsNotMerged(t *testing.T) {
+	t.Parallel()
+
+	result := groups.Merge([]groups.Source{
+		group("common", map[string]any{"TOKEN": "real"}),
+		{
+			Kind:             groups.KindHost,
+			Name:             "laura",
+			Available:        false,
+			Reason:           groups.ReasonNotAuthorized,
+			Shape:            map[string]any{"PERSONAL": ""},
+			ContributesShape: false,
+		},
+	})
+
+	if _, ok := result.Tree["PERSONAL"]; ok {
+		t.Errorf("the shape of a host should not be merged: %v", result.Tree)
+	}
+}
+
 // TestMergeNestedSecrets checks that nested secrets are merged and
 // flattened the way the templates expect.
 func TestMergeNestedSecrets(t *testing.T) {
 	t.Parallel()
 
-	registry := groups.Registry{
-		Groups: []groups.Group{{Name: "default"}},
-	}
-
-	values := map[string]map[string]any{
-		"default": {
+	result := groups.Merge([]groups.Source{
+		group("common", map[string]any{
 			"database": map[string]any{
 				"host":     "db.example.com",
 				"password": "hunter2",
 			},
 			"PLAIN": "value",
-		},
-	}
-	status := map[string]groups.Status{
-		"default": {Group: "default", Available: true},
-	}
-
-	result := groups.Merge(registry, values, status)
+		}),
+	})
 
 	if got := result.Flat["DATABASE_HOST"]; got != "db.example.com" {
 		t.Errorf("DATABASE_HOST = %q, want db.example.com", got)
@@ -141,18 +140,9 @@ func TestMergeNestedSecrets(t *testing.T) {
 func TestMergeSkipsInvalidNames(t *testing.T) {
 	t.Parallel()
 
-	registry := groups.Registry{
-		Groups: []groups.Group{{Name: "default"}},
-	}
-
-	values := map[string]map[string]any{
-		"default": {"not a valid name": "value"},
-	}
-	status := map[string]groups.Status{
-		"default": {Group: "default", Available: true},
-	}
-
-	result := groups.Merge(registry, values, status)
+	result := groups.Merge([]groups.Source{
+		group("common", map[string]any{"not a valid name": "value"}),
+	})
 
 	if len(result.Flat) != 0 {
 		t.Errorf("the secret should be skipped, got %v", result.Flat)
@@ -167,28 +157,63 @@ func TestMergeSkipsInvalidNames(t *testing.T) {
 func TestMergeKeepsGroupValues(t *testing.T) {
 	t.Parallel()
 
-	registry := groups.Registry{
-		Groups: []groups.Group{
-			{Name: "default"},
-			{Name: "other"},
-		},
-	}
+	result := groups.Merge([]groups.Source{
+		group("common", map[string]any{"TOKEN": "real"}),
+		unreadableGroup("other", map[string]any{"TOKEN": ""}),
+	})
 
-	values := map[string]map[string]any{
-		"default": {"TOKEN": "real"},
-		"other":   {"TOKEN": ""},
+	if len(result.GroupValues) != 1 {
+		t.Fatalf("only the readable groups should be kept, got %v", result.GroupValues)
 	}
-	status := map[string]groups.Status{
-		"default": {Group: "default", Available: true},
-		"other":   {Group: "other", Available: false},
+	if result.GroupValues["common"]["TOKEN"] != "real" {
+		t.Errorf("the group should keep its value")
 	}
+}
 
-	result := groups.Merge(registry, values, status)
+// TestMergeMergesNestedMaps checks that two sources that hold the same
+// nested key are merged, rather than the first one winning wholesale.
+//
+// The YAML library decodes a nested mapping into a Document rather than a
+// plain map, so a type switch on map[string]any alone would miss it.
+func TestMergeMergesNestedMaps(t *testing.T) {
+	t.Parallel()
 
-	if len(result.GroupValues) != 2 {
-		t.Fatalf("the group values should be kept, got %v", result.GroupValues)
+	result := groups.Merge([]groups.Source{
+		group("common", map[string]any{
+			"database": payload.Document{"host": "db.example.com"},
+		}),
+		group("other", map[string]any{
+			"database": payload.Document{"password": "hunter2"},
+		}),
+	})
+
+	database, ok := payload.AsMap(result.Tree["database"])
+	if !ok {
+		t.Fatalf("database = %T, want a map", result.Tree["database"])
 	}
-	if result.GroupValues["default"]["TOKEN"] != "real" {
-		t.Errorf("the default group should keep its value")
+	if database["host"] != "db.example.com" {
+		t.Errorf("database.host = %v, want db.example.com", database["host"])
+	}
+	if database["password"] != "hunter2" {
+		t.Errorf("database.password = %v, want hunter2", database["password"])
+	}
+}
+
+// TestMergeFlattensNestedDocuments checks that a nested document is
+// flattened, not stringified.
+func TestMergeFlattensNestedDocuments(t *testing.T) {
+	t.Parallel()
+
+	result := groups.Merge([]groups.Source{
+		group("common", map[string]any{
+			"NESTED": payload.Document{"INNER": "value"},
+		}),
+	})
+
+	if got := result.Flat["NESTED_INNER"]; got != "value" {
+		t.Errorf("NESTED_INNER = %q, want value", got)
+	}
+	if _, ok := result.Flat["NESTED"]; ok {
+		t.Errorf("the nested document should not be flattened as a whole: %v", result.Flat)
 	}
 }

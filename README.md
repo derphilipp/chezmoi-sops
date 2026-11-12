@@ -36,6 +36,19 @@ empty values. A missing *binary* is fatal.
    that will run `chezmoi`. See [Install](#install) below.
 3. Run `chezmoi init`.
 
+A dotfiles repository can list the tool in its mise configuration, so that
+every machine installs and updates it:
+
+```toml
+[tools]
+"github:derphilipp/chezmoi-sops" = "0.1.0"
+```
+
+That covers every machine *after* its first initialisation — the mise
+install happens in a `run_` script, which chezmoi executes after it has
+rendered the configuration. The very first `chezmoi init` on a machine
+still needs the tool installed by hand, for the reason above.
+
 Check it at any time:
 
 ```sh
@@ -89,14 +102,21 @@ is allowed to read and only those.
 With [mise](https://mise.jdx.dev):
 
 ```sh
-mise install github:derphilipp/chezmoi-sops
+mise install github:derphilipp/chezmoi-sops@0.1.0
 ```
 
 With Go:
 
 ```sh
-go install github.com/derphilipp/chezmoi-sops/cmd/chezmoi-sops@latest
+go install github.com/derphilipp/chezmoi-sops/cmd/chezmoi-sops@v0.1.0
 ```
+
+> **A note on `@latest` with mise.** mise hides releases that are younger
+> than its `minimum_release_age` setting (24 hours by default), so
+> `mise install github:derphilipp/chezmoi-sops` — without a version — will
+> not find a release published in the last day. Pin the version, as above,
+> or use `mise install github:derphilipp/chezmoi-sops@0.1.0` to install a
+> fresh release straight away. `go install ...@latest` is not affected.
 
 Either way, verify that the shell that runs `chezmoi` can find it:
 
