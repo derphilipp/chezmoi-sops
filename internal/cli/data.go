@@ -104,7 +104,7 @@ func runData(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fail("Encoding the output: %s", err)
 	}
-	fmt.Println(string(encoded))
+	cmd.Println(string(encoded))
 
 	return nil
 }

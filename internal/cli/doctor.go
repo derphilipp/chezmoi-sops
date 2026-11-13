@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -50,28 +49,28 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 				Key:  strings.Join(host.Age, ", "),
 			})
 		}
-		return printJSON(output)
+		return printJSON(cmd, output)
 	}
 
-	fmt.Println()
-	fmt.Println("chezmoi")
-	fmt.Printf("  source directory: %s\n", environment.Config.SourceDir)
-	fmt.Printf("  encryption:       %s\n", environment.Config.Encryption)
+	cmd.Println()
+	cmd.Println("chezmoi")
+	cmd.Printf("  source directory: %s\n", environment.Config.SourceDir)
+	cmd.Printf("  encryption:       %s\n", environment.Config.Encryption)
 	if environment.Config.Identity == "" {
-		fmt.Println("  identity:         none configured")
+		cmd.Println("  identity:         none configured")
 	} else {
-		fmt.Printf("  identity:         %s\n", environment.Config.Identity)
+		cmd.Printf("  identity:         %s\n", environment.Config.Identity)
 	}
 
-	fmt.Println()
-	fmt.Println("Identity files")
+	cmd.Println()
+	cmd.Println("Identity files")
 	found := false
 	for _, path := range identityPaths() {
 		found = true
-		fmt.Printf("  ✓ %s\n", path)
+		cmd.Printf("  ✓ %s\n", path)
 	}
 	if !found {
-		fmt.Println("  none found")
+		cmd.Println("  none found")
 	}
 
 	problems := environment.checkGroups()
@@ -80,33 +79,33 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		outOfSync[problem.Name] = problem
 	}
 
-	fmt.Println()
-	fmt.Println("Secret groups")
+	cmd.Println()
+	cmd.Println("Secret groups")
 	for _, group := range environment.Layout.Groups {
 		status := statusOfGroup(sources, group.Name)
 		mark := "✗"
 		if status.Available {
 			mark = "✓"
 		}
-		fmt.Printf("  %s %-14s %-6s %2d hosts  %s\n",
+		cmd.Printf("  %s %-14s %-6s %2d hosts  %s\n",
 			mark, group.Name, status.Format, len(group.Members),
 			strings.Join(group.Members, ", "))
 		if !status.Available && status.Reason != "" {
-			fmt.Printf("      %s\n", status.Reason)
+			cmd.Printf("      %s\n", status.Reason)
 		}
 		if problem, ok := outOfSync[group.Name]; ok {
-			fmt.Printf("      the payload is out of date: %s\n", problem.describe())
-			fmt.Printf("      run 'chezmoi sops sync' to encrypt it again\n")
+			cmd.Printf("      the payload is out of date: %s\n", problem.describe())
+			cmd.Printf("      run 'chezmoi sops sync' to encrypt it again\n")
 		}
 	}
 
-	fmt.Println()
-	fmt.Println("Machines")
+	cmd.Println()
+	cmd.Println("Machines")
 	for _, host := range environment.Layout.Hosts {
 		readable := environment.groupsOfHost(host.Name)
-		fmt.Printf("  %-24s %s\n", host.Hostname(), strings.Join(readable, ", "))
+		cmd.Printf("  %-24s %s\n", host.Hostname(), strings.Join(readable, ", "))
 	}
-	fmt.Println()
+	cmd.Println()
 
 	return nil
 }

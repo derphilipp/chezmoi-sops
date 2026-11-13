@@ -112,13 +112,13 @@ func runRename(cmd *cobra.Command, args []string) error {
 	}
 
 	if jsonRequested(cmd) {
-		return printJSON(jsonOutput{
+		return printJSON(cmd, jsonOutput{
 			Command: "rename",
 			OK:      true,
 			Message: fmt.Sprintf("Renamed %s to %s.", from, to),
 		})
 	}
 
-	fmt.Printf("Renamed %s to %s.\n", from, to)
+	cmd.Printf("Renamed %s to %s.\n", from, to)
 	return nil
 }

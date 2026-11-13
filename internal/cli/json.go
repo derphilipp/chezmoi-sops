@@ -59,12 +59,12 @@ type jsonHost struct {
 }
 
 // printJSON writes the machine-readable output of a command.
-func printJSON(output jsonOutput) error {
+func printJSON(cmd *cobra.Command, output jsonOutput) error {
 	encoded, err := json.MarshalIndent(output, "", "  ")
 	if err != nil {
 		return fail("Encoding the output: %s", err)
 	}
-	fmt.Println(string(encoded))
+	cmd.Println(string(encoded))
 	return nil
 }
 

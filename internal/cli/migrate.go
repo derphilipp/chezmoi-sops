@@ -107,18 +107,18 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 	}
 
 	if jsonRequested(cmd) {
-		return printJSON(jsonOutput{
+		return printJSON(cmd, jsonOutput{
 			Command: "migrate",
 			OK:      true,
 			Message: fmt.Sprintf("Migrated %d groups to %s.", len(old), access.FileName),
 		})
 	}
 
-	fmt.Printf("Wrote %s\n", file.Path)
+	cmd.Printf("Wrote %s\n", file.Path)
 	for _, group := range old {
-		fmt.Printf("Moved the group %q\n", group.Name)
+		cmd.Printf("Moved the group %q\n", group.Name)
 	}
-	fmt.Println("Run 'chezmoi init && chezmoi apply' to apply the change.")
+	cmd.Println("Run 'chezmoi init && chezmoi apply' to apply the change.")
 	return nil
 }
 

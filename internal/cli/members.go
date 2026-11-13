@@ -13,19 +13,21 @@ import (
 
 func newKeysCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "keys <machine> [agekey ...]",
+		Use:   "keys [machine] [agekey ...]",
 		Short: "Show or set the age keys of a machine",
 		Long: `Show or set the age keys of a machine.
 
-Without a key, the current keys are listed. With keys, they are replaced.
+Without a machine, the keys of every machine are listed. With a machine but
+without a key, the keys of that machine are listed. With keys, they are
+replaced.
 
 A machine may have more than one key, for example one for the native
 system and one for a virtual machine.
 
 Changing the keys does not re-encrypt the payloads of the groups the
-machine is in. Run "chezmoi sops members" afterwards, or edit the groups
+machine is in. Run "chezmoi sops sync" afterwards, or edit the groups
 by hand.`,
-		Args: cobra.MinimumNArgs(1),
+		Args: cobra.ArbitraryArgs,
 		RunE: runKeys,
 	}
 	addJSONFlag(cmd)
@@ -33,13 +35,18 @@ by hand.`,
 }
 
 func runKeys(cmd *cobra.Command, args []string) error {
-	name := args[0]
-	keys := args[1:]
-
 	environment, err := resolve()
 	if err != nil {
 		return err
 	}
+
+	// Without a machine, every machine is listed.
+	if len(args) == 0 {
+		return runHosts(cmd, args)
+	}
+
+	name := args[0]
+	keys := args[1:]
 
 	host, ok := environment.Layout.Access.Host(name)
 	if !ok {
@@ -48,7 +55,7 @@ func runKeys(cmd *cobra.Command, args []string) error {
 
 	if len(keys) == 0 {
 		if jsonRequested(cmd) {
-			return printJSON(jsonOutput{
+			return printJSON(cmd, jsonOutput{
 				Command: "keys",
 				OK:      true,
 				Hosts: []jsonHost{{
@@ -58,9 +65,9 @@ func runKeys(cmd *cobra.Command, args []string) error {
 				}},
 			})
 		}
-		fmt.Printf("%s\n", host.Hostname())
+		cmd.Printf("%s\n", host.Hostname())
 		for _, key := range host.Age {
-			fmt.Printf("    %s\n", key)
+			cmd.Printf("    %s\n", key)
 		}
 		return nil
 	}
@@ -70,15 +77,15 @@ func runKeys(cmd *cobra.Command, args []string) error {
 	}
 
 	if jsonRequested(cmd) {
-		return printJSON(jsonOutput{
+		return printJSON(cmd, jsonOutput{
 			Command: "keys",
 			OK:      true,
 			Message: fmt.Sprintf("The machine %q has %d key(s) now.", name, len(keys)),
 		})
 	}
 
-	fmt.Printf("The machine %q has %d key(s) now.\n", name, len(keys))
-	fmt.Println("Re-encrypt the groups it is in so the new keys can read them: chezmoi sops members <group>")
+	cmd.Printf("The machine %q has %d key(s) now.\n", name, len(keys))
+	cmd.Println("Re-encrypt the groups it is in so the new keys can read them: chezmoi sops sync")
 	return nil
 }
 
@@ -94,7 +101,7 @@ replaced by the given ones.
 The members decide who may read the group: the recipients of its payloads
 are the age keys of its members. Adding a member therefore means
 re-encrypting the payloads for that key, which this command does.`,
-		Args: cobra.MinimumNArgs(1),
+		Args: cobra.ArbitraryArgs,
 		RunE: runMembers,
 	}
 	cmd.Flags().Bool("no-reencrypt", false, "do not re-encrypt the payloads of the group")
@@ -103,14 +110,20 @@ re-encrypting the payloads for that key, which this command does.`,
 }
 
 func runMembers(cmd *cobra.Command, args []string) error {
-	name := args[0]
-	members := args[1:]
 	noReencrypt, _ := cmd.Flags().GetBool("no-reencrypt")
 
 	environment, err := resolve()
 	if err != nil {
 		return err
 	}
+
+	// Without a group, every group is listed with its members.
+	if len(args) == 0 {
+		return runGroups(cmd, args)
+	}
+
+	name := args[0]
+	members := args[1:]
 
 	group, ok := environment.Layout.Access.Group(name)
 	if !ok {
@@ -119,7 +132,7 @@ func runMembers(cmd *cobra.Command, args []string) error {
 
 	if len(members) == 0 {
 		if jsonRequested(cmd) {
-			return printJSON(jsonOutput{
+			return printJSON(cmd, jsonOutput{
 				Command: "members",
 				OK:      true,
 				Groups: []jsonGroup{{
@@ -129,7 +142,7 @@ func runMembers(cmd *cobra.Command, args []string) error {
 				}},
 			})
 		}
-		fmt.Printf("%s\n", strings.Join(group.Members, ", "))
+		cmd.Printf("%s\n", strings.Join(group.Members, ", "))
 		return nil
 	}
 
@@ -161,22 +174,22 @@ func runMembers(cmd *cobra.Command, args []string) error {
 	}
 
 	if jsonRequested(cmd) {
-		return printJSON(jsonOutput{
+		return printJSON(cmd, jsonOutput{
 			Command: "members",
 			OK:      true,
 			Message: fmt.Sprintf("The group %q is now read by %s.", name, strings.Join(members, ", ")),
 		})
 	}
 
-	fmt.Printf("The group %q is now read by %s.\n", name, strings.Join(members, ", "))
+	cmd.Printf("The group %q is now read by %s.\n", name, strings.Join(members, ", "))
 	switch {
 	case reencrypted:
-		fmt.Println("Its payloads were encrypted again for the new members.")
+		cmd.Println("Its payloads were encrypted again for the new members.")
 	case noReencrypt:
-		fmt.Println("Its payloads were not encrypted again, so the new members cannot read them yet.")
+		cmd.Println("Its payloads were not encrypted again, so the new members cannot read them yet.")
 	default:
-		fmt.Println("Its payloads could not be encrypted again, so the new members cannot read them yet.")
-		fmt.Println("Run 'chezmoi sops edit group/" + name + "' to encrypt them again.")
+		cmd.Println("Its payloads could not be encrypted again, so the new members cannot read them yet.")
+		cmd.Println("Run 'chezmoi sops edit group/" + name + "' to encrypt them again.")
 	}
 	return nil
 }
@@ -273,13 +286,13 @@ func runHosts(cmd *cobra.Command, args []string) error {
 				Groups: environment.groupsOfHost(host.Name),
 			})
 		}
-		return printJSON(output)
+		return printJSON(cmd, output)
 	}
 
 	for _, host := range environment.Layout.Hosts {
-		fmt.Printf("%s\n", host.Hostname())
+		cmd.Printf("%s\n", host.Hostname())
 		for _, key := range host.Age {
-			fmt.Printf("    %s\n", key)
+			cmd.Printf("    %s\n", key)
 		}
 	}
 

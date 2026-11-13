@@ -4,6 +4,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -23,7 +24,6 @@ func SetVersion(v string) {
 		return
 	}
 	version = v
-	rootCmd.Version = VersionString()
 }
 
 // SetCommit sets the commit the tool was built from.
@@ -32,7 +32,6 @@ func SetCommit(c string) {
 		return
 	}
 	commit = c
-	rootCmd.Version = VersionString()
 }
 
 // VersionString returns the version of the tool, with the commit it was
@@ -72,48 +71,80 @@ var (
 	flagEditor     string
 )
 
-var rootCmd = &cobra.Command{
-	Use:   "chezmoi-sops",
-	Short: "Manage sops-encrypted secret groups for chezmoi",
-	Long: `chezmoi-sops manages secret groups for chezmoi.
+// newRootCmd builds the command tree.
+//
+// The tree is built per call rather than kept in a variable, so the commands
+// can be run more than once, which is what the tests do.
+func newRootCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "chezmoi-sops",
+		Short: "Manage sops-encrypted secret groups for chezmoi",
+		Long: `chezmoi-sops manages secret groups for chezmoi.
 
-A group is a set of recipients plus a payload:
+A group is a set of machines plus the secrets they share:
 
-  .secrets/<group>.recipients.txt   the age public keys allowed to decrypt it
-  .secrets/<group>.sops.yaml        the payload, sops encrypted
-  .secrets/<group>.yaml.age         the payload, whole-file age encrypted
+  .secrets/access.yaml                  the machines and the groups
+  .secrets/groups/<group>/<file>        the secrets of a group
+  .secrets/hosts/<machine>/<file>       the secrets of one machine
 
-Because sops encrypts only the values, the key names stay readable in the
-repository. A machine that cannot decrypt a group still sees its shape, so
-templates render with empty values instead of failing.
+The recipients of a group are the age keys of its members, so a key is only
+ever written once. Because sops encrypts only the values, the key names stay
+readable in the repository: a machine that cannot decrypt a group still sees
+its shape, so templates render with empty values instead of failing.
 
 The identity comes from chezmoi's own configuration, so a machine is
 configured in exactly one place.
 
 It runs as a chezmoi plugin: put chezmoi-sops on your PATH and use
 "chezmoi sops ...".`,
-	SilenceUsage:  true,
-	SilenceErrors: true,
-	Version:       version,
-}
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		Version:       VersionString(),
+	}
 
-func init() {
-	rootCmd.PersistentFlags().StringVar(&flagSourceDir, "source-dir", "",
+	cmd.PersistentFlags().StringVar(&flagSourceDir, "source-dir", "",
 		"chezmoi source directory (default: chezmoi source-path)")
-	rootCmd.PersistentFlags().StringVar(&flagIdentity, "identity", "",
+	cmd.PersistentFlags().StringVar(&flagIdentity, "identity", "",
 		"age identity file (default: chezmoi's configuration)")
-	rootCmd.PersistentFlags().StringVar(&flagRecipients, "recipients", "",
+	cmd.PersistentFlags().StringVar(&flagRecipients, "recipients", "",
 		"age recipients file (default: the group's own recipients file)")
-	rootCmd.PersistentFlags().StringVar(&flagEditor, "editor", "",
+	cmd.PersistentFlags().StringVar(&flagEditor, "editor", "",
 		"editor to use (default: $VISUAL, then $EDITOR)")
+
+	cmd.AddCommand(
+		newEditCmd(),
+		newNewCmd(),
+		newGroupsCmd(),
+		newDeleteCmd(),
+		newDataCmd(),
+		newDoctorCmd(),
+		newMembersCmd(),
+		newKeysCmd(),
+		newRenameCmd(),
+		newSyncCmd(),
+		newHostsCmd(),
+		newMigrateCmd(),
+	)
+
+	return cmd
 }
 
 // Execute runs the root command.
 func Execute() error {
-	if err := rootCmd.Execute(); err != nil {
+	return execute(os.Args[1:], os.Stdout, os.Stderr)
+}
+
+// execute runs the command with the given arguments and writes its output.
+func execute(args []string, stdout, stderr io.Writer) error {
+	cmd := newRootCmd()
+	cmd.SetArgs(args)
+	cmd.SetOut(stdout)
+	cmd.SetErr(stderr)
+
+	if err := cmd.Execute(); err != nil {
 		// The quiet error means the command already reported the problem.
 		if !errors.Is(err, errQuiet) {
-			fmt.Fprintln(os.Stderr, "Error:", err)
+			fmt.Fprintln(stderr, "Error:", err)
 		}
 		return err
 	}
@@ -128,21 +159,4 @@ var errQuiet = errors.New("")
 func fail(format string, args ...any) error {
 	fmt.Fprintf(os.Stderr, format+"\n", args...)
 	return errQuiet
-}
-
-func init() {
-	rootCmd.AddCommand(
-		newEditCmd(),
-		newNewCmd(),
-		newGroupsCmd(),
-		newDeleteCmd(),
-		newDataCmd(),
-		newDoctorCmd(),
-		newMembersCmd(),
-		newKeysCmd(),
-		newRenameCmd(),
-		newSyncCmd(),
-		newHostsCmd(),
-		newMigrateCmd(),
-	)
 }

@@ -270,7 +270,7 @@ func runNew(cmd *cobra.Command, args []string) error {
 			return fail("Creating %s: %s", dir, err)
 		}
 		if !jsonRequested(cmd) {
-			fmt.Printf("Created the host %q: %s\n", name, dir)
+			cmd.Printf("Created the host %q: %s\n", name, dir)
 		}
 		return nil
 	}
@@ -290,9 +290,9 @@ func runNew(cmd *cobra.Command, args []string) error {
 	}
 
 	if !jsonRequested(cmd) {
-		fmt.Printf("Created the group %q: %s\n", name, dir)
+		cmd.Printf("Created the group %q: %s\n", name, dir)
 		if len(members) == 0 {
-			fmt.Printf("Add the hosts that may read it with: chezmoi sops members %s\n", name)
+			cmd.Printf("Add the hosts that may read it with: chezmoi sops members %s\n", name)
 		}
 	}
 
@@ -338,7 +338,7 @@ func runGroups(cmd *cobra.Command, args []string) error {
 				Key:  strings.Join(host.Age, ", "),
 			})
 		}
-		return printJSON(output)
+		return printJSON(cmd, output)
 	}
 
 	problems := environment.checkGroups()
@@ -347,8 +347,8 @@ func runGroups(cmd *cobra.Command, args []string) error {
 		outOfSync[problem.Name] = true
 	}
 
-	fmt.Println()
-	fmt.Println("Secret groups")
+	cmd.Println()
+	cmd.Println("Secret groups")
 	for _, group := range environment.Layout.Groups {
 		status := statusOfGroup(sources, group.Name)
 		mark := "✗"
@@ -360,27 +360,27 @@ func runGroups(cmd *cobra.Command, args []string) error {
 			// the group has members.
 			mark = "!"
 		}
-		fmt.Printf("  %s %-14s %-6s %2d hosts  %s\n",
+		cmd.Printf("  %s %-14s %-6s %2d hosts  %s\n",
 			mark, group.Name, formatOfGroups(group, sources), len(group.Members),
 			strings.Join(group.Members, ", "))
 	}
 
 	if len(problems) > 0 {
-		fmt.Println()
-		fmt.Println("The payloads of these groups are not encrypted for the current members:")
+		cmd.Println()
+		cmd.Println("The payloads of these groups are not encrypted for the current members:")
 		for _, problem := range problems {
-			fmt.Printf("  %s: %s\n", problem.Name, problem.describe())
+			cmd.Printf("  %s: %s\n", problem.Name, problem.describe())
 		}
-		fmt.Println("Run 'chezmoi sops sync' to encrypt them again.")
+		cmd.Println("Run 'chezmoi sops sync' to encrypt them again.")
 	}
 
-	fmt.Println()
-	fmt.Println("Machines")
+	cmd.Println()
+	cmd.Println("Machines")
 	for _, host := range environment.Layout.Hosts {
 		groups := environment.groupsOfHost(host.Name)
-		fmt.Printf("  %-24s %s\n", host.Hostname(), strings.Join(groups, ", "))
+		cmd.Printf("  %-24s %s\n", host.Hostname(), strings.Join(groups, ", "))
 	}
-	fmt.Println()
+	cmd.Println()
 
 	return nil
 }
@@ -478,7 +478,7 @@ func runDelete(cmd *cobra.Command, args []string) error {
 	}
 
 	if jsonRequested(cmd) {
-		return printJSON(jsonOutput{
+		return printJSON(cmd, jsonOutput{
 			Command: "delete",
 			OK:      true,
 			Message: fmt.Sprintf("Deleted %s.", t),
@@ -487,8 +487,8 @@ func runDelete(cmd *cobra.Command, args []string) error {
 	}
 
 	for _, path := range removed {
-		fmt.Printf("Removed %s\n", path)
+		cmd.Printf("Removed %s\n", path)
 	}
-	fmt.Println("Run 'chezmoi init && chezmoi apply' to apply the change.")
+	cmd.Println("Run 'chezmoi init && chezmoi apply' to apply the change.")
 	return nil
 }

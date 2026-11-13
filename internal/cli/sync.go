@@ -139,13 +139,13 @@ func runSync(cmd *cobra.Command, args []string) error {
 	problems := environment.checkGroups()
 	if len(problems) == 0 {
 		if jsonRequested(cmd) {
-			return printJSON(jsonOutput{
+			return printJSON(cmd, jsonOutput{
 				Command: "sync",
 				OK:      true,
 				Message: "Every payload is encrypted for the current members.",
 			})
 		}
-		fmt.Println("Every payload is encrypted for the current members.")
+		cmd.Println("Every payload is encrypted for the current members.")
 		return nil
 	}
 
@@ -182,7 +182,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 				Hosts: problem.Missing,
 			})
 		}
-		if err := printJSON(output); err != nil {
+		if err := printJSON(cmd, output); err != nil {
 			return err
 		}
 		if len(failed) > 0 {
@@ -192,17 +192,17 @@ func runSync(cmd *cobra.Command, args []string) error {
 	}
 
 	for _, problem := range problems {
-		fmt.Printf("%s: %s\n", problem.Name, problem.describe())
+		cmd.Printf("%s: %s\n", problem.Name, problem.describe())
 	}
 
 	switch {
 	case check:
-		fmt.Printf("\nRun 'chezmoi sops sync' to encrypt them again.\n")
+		cmd.Printf("\nRun 'chezmoi sops sync' to encrypt them again.\n")
 	case len(failed) > 0:
 		return fail("The payloads of %v could not be encrypted again. "+
 			"A machine that can read them has to do it.", failed)
 	default:
-		fmt.Printf("\nEncrypted %d payload(s) again for the current members.\n", len(synced))
+		cmd.Printf("\nEncrypted %d payload(s) again for the current members.\n", len(synced))
 	}
 
 	return nil
