@@ -35,31 +35,35 @@ func (c Config) SecretsDir() string {
 
 // Load reads the chezmoi configuration.
 //
-// Two chezmoi commands are used, because they answer different questions:
+// The source directory is taken from sourceDir when it is given. Otherwise
+// it comes from chezmoi:
 //
-//   - "chezmoi source-path" gives the source directory. It works even when
-//     there is no configuration file at all, which matters on a machine
-//     that has not been initialised yet.
-//   - "chezmoi data --format json" gives the effective configuration. It
-//     reads the *rendered* configuration file, not the template, so calling
-//     it from a template does not recurse.
+//   - $CHEZMOI_SOURCE_DIR, which chezmoi sets before it runs a template or
+//     a plugin, so a plugin sees the source directory of the chezmoi
+//     invocation it belongs to;
+//   - "chezmoi source-path", which works even when there is no
+//     configuration file at all, which matters on a machine that has not
+//     been initialised yet.
 //
-// $CHEZMOI_SOURCE_DIR wins over both: chezmoi sets it before it runs a
-// template or a plugin, so a plugin sees the source directory of the
-// chezmoi invocation it belongs to, even when that invocation used
-// --source or --config.
-func Load() (Config, error) {
+// The rest of the configuration comes from "chezmoi data --format json". It
+// reads the *rendered* configuration file, not the template, so calling it
+// from a template does not recurse. It is a bonus: without chezmoi, or
+// without a configuration file, the tool still works and finds the identity
+// itself.
+func Load(sourceDir string) (Config, error) {
 	config := Config{}
 
-	sourceDir, err := sourcePath()
-	if err != nil {
-		return config, err
+	dir := strings.TrimSpace(sourceDir)
+	if dir == "" {
+		var err error
+		dir, err = sourcePath()
+		if err != nil {
+			return config, err
+		}
 	}
-	config.SourceDir = sourceDir
+	config.SourceDir = dir
 
-	// The configuration is a bonus: without it the tool still works, it
-	// just has to find the identity itself.
-	if data, err := data(); err == nil {
+	if data, err := data(dir); err == nil {
 		config.Identity = data.Chezmoi.Config.Age.Identity
 		config.RecipientsFile = data.Chezmoi.Config.Age.RecipientsFile
 		config.Encryption = data.Chezmoi.Config.Encryption
@@ -77,7 +81,7 @@ func sourcePath() (string, error) {
 	out, err := exec.Command("chezmoi", "source-path").Output()
 	if err != nil {
 		return "", fmt.Errorf("reading the chezmoi source directory: %w "+
-			"(is chezmoi installed?)", err)
+			"(is chezmoi installed, or was --source-dir given?)", err)
 	}
 	dir := strings.TrimSpace(string(out))
 	if dir == "" {
@@ -102,15 +106,23 @@ type chezmoiData struct {
 
 // data returns the effective chezmoi configuration.
 //
-// The source directory is passed explicitly, so the configuration of the
-// chezmoi invocation the tool belongs to is read, not the default one.
-func data() (chezmoiData, error) {
+// The configuration of the chezmoi invocation the tool belongs to is read,
+// not the default one: chezmoi sets $CHEZMOI_CONFIG_FILE and
+// $CHEZMOI_SOURCE_DIR before it runs a template or a plugin, and a plugin
+// that read the default configuration would get the wrong identity.
+func data(sourceDir string) (chezmoiData, error) {
 	var parsed chezmoiData
 
-	args := []string{"data", "--format", "json"}
-	if sourceDir := strings.TrimSpace(os.Getenv("CHEZMOI_SOURCE_DIR")); sourceDir != "" {
-		args = append([]string{"--source", sourceDir}, args...)
+	var args []string
+	if configFile := strings.TrimSpace(os.Getenv("CHEZMOI_CONFIG_FILE")); configFile != "" {
+		args = append(args, "--config", configFile)
 	}
+	if dir := strings.TrimSpace(os.Getenv("CHEZMOI_SOURCE_DIR")); dir != "" {
+		args = append(args, "--source", dir)
+	} else if sourceDir != "" {
+		args = append(args, "--source", sourceDir)
+	}
+	args = append(args, "data", "--format", "json")
 
 	out, err := exec.Command("chezmoi", args...).Output()
 	if err != nil {

@@ -66,6 +66,33 @@ jobs:
         # it is run explicitly here to make sure it does not skip.
         run: go test -race -run 'TestSOPSCompatibleWithCLI' -v ./internal/payload/
 
+  integration:
+    # The whole thing, end to end: chezmoi runs the tool as a plugin, the
+    # tool decrypts the groups, and the secrets end up in the rendered
+    # configuration.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache: true
+
+      - name: Install chezmoi
+        run: |
+          curl -sSL -o /tmp/chezmoi.tar.gz \
+            "https://github.com/twpayne/chezmoi/releases/download/v2.73.3/chezmoi_2.73.3_linux_amd64.tar.gz"
+          tar -xzf /tmp/chezmoi.tar.gz -C /tmp chezmoi
+          sudo mv /tmp/chezmoi /usr/local/bin/chezmoi
+          chezmoi --version
+
+      - name: Build
+        run: go build -trimpath -o /usr/local/bin/chezmoi-sops ./cmd/chezmoi-sops
+
+      - name: Check the round trip
+        run: ./scripts/integration.sh
+
   shell:
     # The tool is a chezmoi plugin, so it has to work on a machine where only
     # a POSIX shell is available.

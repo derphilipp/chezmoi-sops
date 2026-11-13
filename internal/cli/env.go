@@ -37,13 +37,11 @@ func (e *env) secretsDir() string {
 // resolve reads the chezmoi configuration and finds the layout and the
 // identity.
 func resolve() (*env, error) {
-	config, err := chezmoi.Load()
+	// The source directory is given when it is known, so the tool works
+	// without chezmoi being installed.
+	config, err := chezmoi.Load(flagSourceDir)
 	if err != nil {
 		return nil, err
-	}
-
-	if flagSourceDir != "" {
-		config.SourceDir = flagSourceDir
 	}
 
 	layout, err := groups.Discover(config.SecretsDir())

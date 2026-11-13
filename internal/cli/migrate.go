@@ -36,12 +36,9 @@ bytes afterwards.`,
 func runMigrate(cmd *cobra.Command, args []string) error {
 	// The migration runs on the old layout, so it cannot use resolve():
 	// that needs the access file, which is what the migration creates.
-	config, err := chezmoi.Load()
+	config, err := chezmoi.Load(flagSourceDir)
 	if err != nil {
 		return err
-	}
-	if flagSourceDir != "" {
-		config.SourceDir = flagSourceDir
 	}
 
 	dir := config.SecretsDir()
