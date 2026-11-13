@@ -53,13 +53,7 @@ jobs:
           cache: true
 
       - name: Install sops
-        run: |
-          # The release asset is the raw binary, not a tarball.
-          curl -sSL -o /tmp/sops \
-            "https://github.com/getsops/sops/releases/download/v3.13.3/sops-v3.13.3.linux.amd64"
-          chmod 0755 /tmp/sops
-          sudo mv /tmp/sops /usr/local/bin/sops
-          sops --version
+        run: ./scripts/install.sh sops v3.13.3 getsops/sops sops-v3.13.3.linux.amd64
 
       - name: Compatibility test
         # The compatibility test skips itself when sops is not installed, so
@@ -80,12 +74,11 @@ jobs:
           cache: true
 
       - name: Install chezmoi
-        run: |
-          curl -sSL -o /tmp/chezmoi.tar.gz \
-            "https://github.com/twpayne/chezmoi/releases/download/v2.73.3/chezmoi_2.73.3_linux_amd64.tar.gz"
-          tar -xzf /tmp/chezmoi.tar.gz -C /tmp chezmoi
-          sudo mv /tmp/chezmoi /usr/local/bin/chezmoi
-          chezmoi --version
+        run: ./scripts/install.sh chezmoi v2.73.3 twpayne/chezmoi chezmoi_2.73.3_linux_amd64.tar.gz
+
+      - name: Install age
+        # The integration test needs an age identity.
+        run: ./scripts/install.sh age v1.3.2 FiloSottile/age age-v1.3.2-linux-amd64.tar.gz
 
       - name: Build
         run: go build -trimpath -o /usr/local/bin/chezmoi-sops ./cmd/chezmoi-sops
