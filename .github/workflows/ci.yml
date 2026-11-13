@@ -106,8 +106,12 @@ jobs:
         run: |
           install -m 0755 /tmp/chezmoi-sops /usr/local/bin/chezmoi-sops
           chezmoi-sops --help > /dev/null
-          chezmoi-sops groups --help > /dev/null
+          chezmoi-sops group --help > /dev/null
+          chezmoi-sops group create --help > /dev/null
+          chezmoi-sops group edit --help > /dev/null
+          chezmoi-sops group delete --help > /dev/null
+          chezmoi-sops machine --help > /dev/null
+          chezmoi-sops machine list --help > /dev/null
           chezmoi-sops data --help > /dev/null
-          chezmoi-sops edit --help > /dev/null
-          chezmoi-sops new --help > /dev/null
-          chezmoi-sops delete --help > /dev/null
+          chezmoi-sops doctor --help > /dev/null
+          chezmoi-sops sync --help > /dev/null
