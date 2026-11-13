@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/derphilipp/chezmoi-sops/internal/access"
-	"github.com/derphilipp/chezmoi-sops/internal/groups"
 )
 
 // accessPath returns the path of the access file.
@@ -20,7 +19,7 @@ func (e *env) accessPath() string {
 func (e *env) addGroup(name string, members []string) error {
 	for _, member := range members {
 		if _, ok := e.Layout.Access.Host(member); !ok {
-			return fmt.Errorf("the host %q is not in %s", member, access.FileName)
+			return fmt.Errorf("the machine %q is not in %s", member, access.FileName)
 		}
 	}
 
@@ -34,8 +33,8 @@ func (e *env) addGroup(name string, members []string) error {
 	return file.Save()
 }
 
-// addHost adds a machine with its age keys to the access file.
-func (e *env) addHost(name string, keys []string) error {
+// addMachine adds a machine with its age keys to the access file.
+func (e *env) addMachine(name string, keys []string) error {
 	if len(keys) == 0 {
 		return fmt.Errorf("a machine needs at least one age key")
 	}
@@ -50,8 +49,8 @@ func (e *env) addHost(name string, keys []string) error {
 	return file.Save()
 }
 
-// setHostKeys replaces the age keys of a machine.
-func (e *env) setHostKeys(name string, keys []string) error {
+// setMachineKeys replaces the age keys of a machine.
+func (e *env) setMachineKeys(name string, keys []string) error {
 	if len(keys) == 0 {
 		return fmt.Errorf("a machine needs at least one age key")
 	}
@@ -70,7 +69,7 @@ func (e *env) setHostKeys(name string, keys []string) error {
 func (e *env) setMembers(name string, members []string) error {
 	for _, member := range members {
 		if _, ok := e.Layout.Access.Host(member); !ok {
-			return fmt.Errorf("the host %q is not in %s", member, access.FileName)
+			return fmt.Errorf("the machine %q is not in %s", member, access.FileName)
 		}
 	}
 
@@ -92,9 +91,9 @@ func (e *env) removeEntry(t target) error {
 	}
 
 	switch t.Kind {
-	case groups.KindGroup:
+	case kindGroup:
 		err = file.RemoveGroup(t.Name)
-	case groups.KindHost:
+	case kindMachine:
 		err = file.RemoveHost(t.Name)
 	default:
 		err = fmt.Errorf("unknown kind %q", t.Kind)

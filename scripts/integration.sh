@@ -36,7 +36,7 @@ EOF
 
 # The tool creates the payload, the way a user would.
 chezmoi-sops --source-dir "$SOURCE" --identity "$HOME_DIR/key.txt" \
-    --editor "$SCRIPT_DIR/fake-editor.sh" edit group/common >/dev/null
+    --editor "$SCRIPT_DIR/fake-editor.sh" group edit common >/dev/null
 
 # The payload must be encrypted, and the key name must still be readable.
 if grep -q "the-secret-value" "$SOURCE/.secrets/groups/common/common.sops.yaml"; then

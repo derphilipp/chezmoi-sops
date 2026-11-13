@@ -96,8 +96,7 @@ The identity comes from chezmoi's own configuration, so a machine is
 configured in exactly one place.
 
 It runs as a chezmoi plugin: put chezmoi-sops on your PATH and use
-"chezmoi sops ...".`,
-		SilenceUsage:  true,
+"chezmoi sops ...".`, SilenceUsage: true,
 		SilenceErrors: true,
 		Version:       VersionString(),
 	}
@@ -112,18 +111,11 @@ It runs as a chezmoi plugin: put chezmoi-sops on your PATH and use
 		"editor to use (default: $VISUAL, then $EDITOR)")
 
 	cmd.AddCommand(
-		newEditCmd(),
-		newNewCmd(),
-		newGroupsCmd(),
-		newDeleteCmd(),
+		newGroupCmd(),
+		newMachineCmd(),
 		newDataCmd(),
 		newDoctorCmd(),
-		newMembersCmd(),
-		newKeysCmd(),
-		newRenameCmd(),
 		newSyncCmd(),
-		newHostsCmd(),
-		newMigrateCmd(),
 	)
 
 	return cmd

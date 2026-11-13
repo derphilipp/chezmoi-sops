@@ -178,8 +178,8 @@ func runSync(cmd *cobra.Command, args []string) error {
 		}
 		for _, problem := range problems {
 			output.Groups = append(output.Groups, jsonGroup{
-				Name:  problem.Name,
-				Hosts: problem.Missing,
+				Name:     problem.Name,
+				Machines: problem.Missing,
 			})
 		}
 		if err := printJSON(cmd, output); err != nil {

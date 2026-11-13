@@ -22,9 +22,9 @@ type jsonOutput struct {
 	// Groups is the list of groups, for the "groups" command.
 	Groups []jsonGroup `json:"groups,omitempty"`
 
-	// Hosts is the list of hosts and the groups they can read, for the
-	// "groups" command.
-	Hosts []jsonHost `json:"hosts,omitempty"`
+	// Machines is the list of machines and the groups they can read, for
+	// the "machine list" command.
+	Machines []jsonMachine `json:"machines,omitempty"`
 
 	// Removed is the list of files that were removed, for the "delete"
 	// command.
@@ -39,17 +39,17 @@ type jsonGroup struct {
 	// Format is the payload format of the group.
 	Format string `json:"format"`
 
-	// Hosts are the machines that can read the group.
-	Hosts []string `json:"hosts"`
+	// Machines are the machines that can read the group.
+	Machines []string `json:"machines"`
 
 	// Recipients are the age public keys of the group.
 	Recipients []string `json:"recipients"`
 }
 
-// jsonHost is one host in the machine-readable output.
-type jsonHost struct {
-	// Host is the name of the machine.
-	Host string `json:"host"`
+// jsonMachine is one machine in the machine-readable output.
+type jsonMachine struct {
+	// Machine is the name of the machine.
+	Machine string `json:"machine"`
 
 	// Key is the age public key of the machine.
 	Key string `json:"key"`

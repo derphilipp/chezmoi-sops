@@ -79,8 +79,13 @@ The secrets live in a directory tree that carries the access control:
 .secrets/
   access.yaml                   the machines and the groups
   groups/<group>/<file>         readable by the members of the group
-  hosts/<host>/<file>           readable by that machine alone
+  hosts/<machine>/<file>        readable by that machine alone
 ```
+
+The directory is called `hosts`, and the same section of the access file is
+called `hosts`, because those names are on disk: renaming them would mean
+migrating every existing repository. The command line and the messages call
+them machines, because that is what they are.
 
 `access.yaml` is the only place the access control is written down:
 
@@ -185,16 +190,30 @@ It runs as a [chezmoi plugin](https://www.chezmoi.io/reference/plugins/): with
 `chezmoi-sops` on your `PATH`, `chezmoi sops ...` runs it.
 
 ```sh
-chezmoi sops groups                  # the groups, the machines, and who can read what
-chezmoi sops hosts                   # the machines and their keys
-chezmoi sops new work                 # create a group
-chezmoi sops members work laura leela # who may read a group
-chezmoi sops edit group/work          # decrypt, edit, re-encrypt
-chezmoi sops edit host/laura          # the secrets of one machine
-chezmoi sops delete group/work        # remove a group
-chezmoi sops data                     # the merged secrets, as JSON
-chezmoi sops doctor                   # what works and what does not
+chezmoi sops group list                  # the groups, their members, and their state
+chezmoi sops group create work           # create a group
+chezmoi sops group add work laura leela  # let machines read the group
+chezmoi sops group remove work laura     # stop a machine from reading it
+chezmoi sops group members work          # who may read the group
+chezmoi sops group edit work             # decrypt, edit, re-encrypt
+chezmoi sops group rename work office    # rename the group
+chezmoi sops group delete work           # remove the group
+
+chezmoi sops machine list                # the machines, their keys, their groups
+chezmoi sops machine create laura age1... # add a machine
+chezmoi sops machine keys laura age1...  # replace its keys
+chezmoi sops machine edit laura          # the secrets of one machine
+chezmoi sops machine rename laura laura2 # rename the machine
+chezmoi sops machine delete laura        # remove the machine
+
+chezmoi sops sync                        # encrypt again after a membership change
+chezmoi sops data                        # the merged secrets, as JSON
+chezmoi sops doctor                      # what works and what does not
 ```
+
+The commands are grouped by what they act on. `group` is the set of machines
+plus the secrets they share; `machine` is one machine, its keys, and its own
+private secrets.
 
 The order of the groups in the access file is the merge order, and the first
 group that holds a value wins.

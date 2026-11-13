@@ -39,14 +39,14 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 			output.Groups = append(output.Groups, jsonGroup{
 				Name:       group.Name,
 				Format:     status.Format,
-				Hosts:      group.Members,
+				Machines:   group.Members,
 				Recipients: group.Recipients,
 			})
 		}
-		for _, host := range environment.Layout.Hosts {
-			output.Hosts = append(output.Hosts, jsonHost{
-				Host: host.Hostname(),
-				Key:  strings.Join(host.Age, ", "),
+		for _, machine := range environment.Layout.Hosts {
+			output.Machines = append(output.Machines, jsonMachine{
+				Machine: machine.Hostname(),
+				Key:     strings.Join(machine.Age, ", "),
 			})
 		}
 		return printJSON(cmd, output)
@@ -87,7 +87,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		if status.Available {
 			mark = "✓"
 		}
-		cmd.Printf("  %s %-14s %-6s %2d hosts  %s\n",
+		cmd.Printf("  %s %-14s %-6s %2d machines  %s\n",
 			mark, group.Name, status.Format, len(group.Members),
 			strings.Join(group.Members, ", "))
 		if !status.Available && status.Reason != "" {
@@ -101,9 +101,9 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 
 	cmd.Println()
 	cmd.Println("Machines")
-	for _, host := range environment.Layout.Hosts {
-		readable := environment.groupsOfHost(host.Name)
-		cmd.Printf("  %-24s %s\n", host.Hostname(), strings.Join(readable, ", "))
+	for _, machine := range environment.Layout.Hosts {
+		readable := environment.groupsOfMachine(machine.Name)
+		cmd.Printf("  %-24s %s\n", machine.Hostname(), strings.Join(readable, ", "))
 	}
 	cmd.Println()
 
