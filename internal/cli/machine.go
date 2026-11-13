@@ -41,7 +41,7 @@ func newMachineListCmd() *cobra.Command {
 
 A machine can have more than one key, for example one for the native system
 and one for a virtual machine.`,
-		Args: cobra.NoArgs,
+		Args: noArgs(`The "machine list" command takes no arguments.`),
 		RunE: runMachineList,
 	}
 	addJSONFlag(cmd)
@@ -92,7 +92,7 @@ groups it may read are encrypted for.
 
 The secrets a machine shares with other machines belong to a group: create
 one with "chezmoi sops group create".`,
-		Args:              cobra.MinimumNArgs(2),
+		Args:              minArgs(2, `The "machine create" command needs the name of the machine and at least one age key.`),
 		ValidArgsFunction: completeMachines,
 		RunE:              runMachineCreate,
 	}
@@ -147,7 +147,7 @@ machine cannot decrypt it, the payload is not overwritten unless --force is
 given.
 
 Without a file, every payload of the machine is opened in one editor session.`,
-		Args:              cobra.RangeArgs(1, 2),
+		Args:              rangeArgs(1, 2, `The "machine edit" command needs the name of a machine.`),
 		ValidArgsFunction: completeMachineTarget,
 		RunE:              runMachineEdit,
 	}
@@ -177,7 +177,7 @@ system and one for a virtual machine.
 Changing the keys does not encrypt the payloads of the groups the machine
 is in again. Run "chezmoi sops sync" afterwards, or edit the groups by
 hand.`,
-		Args:              cobra.MinimumNArgs(1),
+		Args:              minArgs(1, `The "machine keys" command needs the name of a machine.`),
 		ValidArgsFunction: completeMachines,
 		RunE:              runMachineKeys,
 	}
@@ -244,7 +244,7 @@ func newMachineRenameCmd() *cobra.Command {
 The entry in the access file and the directory are renamed together, so the
 layout stays consistent. The groups the machine is in keep it, and the
 payloads are not touched.`,
-		Args:              cobra.ExactArgs(2),
+		Args:              exactArgs(2, `The "machine rename" command needs the old name and the new name.`),
 		ValidArgsFunction: completeMachines,
 		RunE:              runMachineRename,
 	}
@@ -264,7 +264,7 @@ func newMachineDeleteCmd() *cobra.Command {
 
 The payload directory is removed and the entry is removed from the access
 file. The machine is removed from the groups it was a member of.`,
-		Args:              cobra.ExactArgs(1),
+		Args:              exactArgs(1, `The "machine delete" command needs the name of a machine.`),
 		ValidArgsFunction: completeMachines,
 		RunE:              runMachineDelete,
 	}

@@ -31,7 +31,7 @@ The output is a JSON object:
     "secretGroups": { "default": { ... } },     the values of each group
     "secretStatus": { "available": true },      the status of the groups
   }`,
-		Args: cobra.NoArgs,
+		Args: noArgs(`The "data" command takes no arguments.`),
 		RunE: runData,
 	}
 	cmd.Flags().String("format", "json", "output format (json)")

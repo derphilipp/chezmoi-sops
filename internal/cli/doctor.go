@@ -17,7 +17,7 @@ func newDoctorCmd() *cobra.Command {
 The report covers the chezmoi installation, the identity that would be
 used, and every group: whether it can be decrypted, and why not when it
 cannot.`,
-		Args: cobra.NoArgs,
+		Args: noArgs(`The "doctor" command takes no arguments.`),
 		RunE: runDoctor,
 	}
 	addJSONFlag(cmd)

@@ -110,6 +110,12 @@ It runs as a chezmoi plugin: put chezmoi-sops on your PATH and use
 	cmd.PersistentFlags().StringVar(&flagEditor, "editor", "",
 		"editor to use (default: $VISUAL, then $EDITOR)")
 
+	// A flag that does not exist is a call that cannot work, like a missing
+	// argument. The usage says which flags the command really has.
+	cmd.SetFlagErrorFunc(func(c *cobra.Command, err error) error {
+		return usageError(c, err.Error())
+	})
+
 	cmd.AddCommand(
 		newGroupCmd(),
 		newMachineCmd(),

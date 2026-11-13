@@ -120,7 +120,7 @@ cannot read it, and the removed ones still can.
 This finds the payloads that are out of date and encrypts them again. It
 needs the identity of a machine that can read them, so a payload this
 machine cannot read is reported instead of being changed.`,
-		Args: cobra.NoArgs,
+		Args: noArgs(`The "sync" command takes no arguments.`),
 		RunE: runSync,
 	}
 	cmd.Flags().Bool("check", false, "only report what is out of date, change nothing")

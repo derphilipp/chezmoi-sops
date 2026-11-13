@@ -49,7 +49,7 @@ which value wins when two of them hold the same key.
 
 A mark of "!" means that the payloads of the group are not encrypted for its
 current members. Run "chezmoi sops sync" to encrypt them again.`,
-		Args: cobra.NoArgs,
+		Args: noArgs(`The "group list" command takes no arguments.`),
 		RunE: runGroupList,
 	}
 	addJSONFlag(cmd)
@@ -126,7 +126,7 @@ changed later with "chezmoi sops group add" and "chezmoi sops group remove".
 
 To give a machine secrets of its own, create a machine instead:
 "chezmoi sops machine create <name> <age key>".`,
-		Args:              cobra.MinimumNArgs(1),
+		Args:              minArgs(1, `The "group create" command needs the name of the new group.`),
 		ValidArgsFunction: completeNewGroup,
 		RunE:              runGroupCreate,
 	}
@@ -184,7 +184,7 @@ machine cannot decrypt it, the payload is not overwritten unless --force is
 given.
 
 Without a file, every payload of the group is opened in one editor session.`,
-		Args:              cobra.RangeArgs(1, 2),
+		Args:              rangeArgs(1, 2, `The "group edit" command needs the name of a group.`),
 		ValidArgsFunction: completeGroupTarget,
 		RunE:              runGroupEdit,
 	}
@@ -211,7 +211,7 @@ group are encrypted again for their keys, so that they can read them.
 The payloads can only be encrypted again by a machine that is able to read
 them. Use --no-reencrypt to change the members without touching the
 payloads.`,
-		Args:              cobra.MinimumNArgs(2),
+		Args:              minArgs(2, `The "group add" command needs the name of a group and at least one machine.`),
 		ValidArgsFunction: completeGroupMachines,
 		RunE:              runGroupAdd,
 	}
@@ -264,7 +264,7 @@ the removed ones cannot read them any more.
 The payloads can only be encrypted again by a machine that is able to read
 them. Use --no-reencrypt to change the members without touching the
 payloads.`,
-		Args:              cobra.MinimumNArgs(2),
+		Args:              minArgs(2, `The "group remove" command needs the name of a group and at least one machine.`),
 		ValidArgsFunction: completeGroupMachines,
 		RunE:              runGroupRemove,
 	}
@@ -311,7 +311,7 @@ func newGroupMembersCmd() *cobra.Command {
 
 The members decide who may read the group: the recipients of its payloads
 are the age keys of its members.`,
-		Args:              cobra.ExactArgs(1),
+		Args:              exactArgs(1, `The "group members" command needs the name of a group.`),
 		ValidArgsFunction: completeGroups,
 		RunE:              runGroupMembers,
 	}
@@ -356,7 +356,7 @@ func newGroupRenameCmd() *cobra.Command {
 
 The entry in the access file and the directory are renamed together, so the
 layout stays consistent. The payloads are not touched.`,
-		Args:              cobra.ExactArgs(2),
+		Args:              exactArgs(2, `The "group rename" command needs the old name and the new name.`),
 		ValidArgsFunction: completeGroups,
 		RunE:              runGroupRename,
 	}
@@ -376,7 +376,7 @@ func newGroupDeleteCmd() *cobra.Command {
 
 The payload directory is removed and the entry is removed from the access
 file.`,
-		Args:              cobra.ExactArgs(1),
+		Args:              exactArgs(1, `The "group delete" command needs the name of a group.`),
 		ValidArgsFunction: completeGroups,
 		RunE:              runGroupDelete,
 	}
