@@ -24,8 +24,9 @@ given.
 
 Without a file, every payload of the group or host is opened in one editor
 session.`,
-		Args: cobra.ExactArgs(1),
-		RunE: runEdit,
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: completeTargets,
+		RunE:              runEdit,
 	}
 	cmd.Flags().BoolP("force", "f", false, "overwrite without decrypting first")
 	cmd.Flags().Bool("sops", false, "convert the payload to the sops format")
@@ -434,8 +435,9 @@ func newDeleteCmd() *cobra.Command {
 
 The payload directory is removed and the entry is removed from the access
 file.`,
-		Args: cobra.ExactArgs(1),
-		RunE: runDelete,
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: completeTargets,
+		RunE:              runDelete,
 	}
 	addJSONFlag(cmd)
 	return cmd

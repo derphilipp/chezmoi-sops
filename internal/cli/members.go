@@ -27,8 +27,9 @@ system and one for a virtual machine.
 Changing the keys does not re-encrypt the payloads of the groups the
 machine is in. Run "chezmoi sops sync" afterwards, or edit the groups
 by hand.`,
-		Args: cobra.ArbitraryArgs,
-		RunE: runKeys,
+		Args:              cobra.ArbitraryArgs,
+		ValidArgsFunction: completeHosts,
+		RunE:              runKeys,
 	}
 	addJSONFlag(cmd)
 	return cmd
@@ -101,8 +102,9 @@ replaced by the given ones.
 The members decide who may read the group: the recipients of its payloads
 are the age keys of its members. Adding a member therefore means
 re-encrypting the payloads for that key, which this command does.`,
-		Args: cobra.ArbitraryArgs,
-		RunE: runMembers,
+		Args:              cobra.ArbitraryArgs,
+		ValidArgsFunction: completeGroups,
+		RunE:              runMembers,
 	}
 	cmd.Flags().Bool("no-reencrypt", false, "do not re-encrypt the payloads of the group")
 	addJSONFlag(cmd)
