@@ -235,7 +235,7 @@ func runGroupAdd(cmd *cobra.Command, args []string) error {
 	}
 
 	for _, machine := range machines {
-		if _, ok := environment.Layout.Access.Host(machine); !ok {
+		if _, ok := environment.Layout.Access.Machine(machine); !ok {
 			return fail("The machine %q is not in %s.", machine, access.FileName)
 		}
 	}

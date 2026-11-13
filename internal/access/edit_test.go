@@ -17,7 +17,7 @@ func TestSaveKeepsTheComments(t *testing.T) {
 	t.Parallel()
 
 	path := write(t, `# The access file
-hosts:
+machines:
   # the boss
   laura:
     age:
@@ -54,7 +54,7 @@ groups:
 func TestAddAndRemove(t *testing.T) {
 	t.Parallel()
 
-	path := write(t, `hosts:
+	path := write(t, `machines:
   laura:
     age: [age1laura]
 groups:
@@ -67,8 +67,8 @@ groups:
 		t.Fatalf("load: %v", err)
 	}
 
-	if err := file.AddHost("leela", []string{"age1leela"}); err != nil {
-		t.Fatalf("add host: %v", err)
+	if err := file.AddMachine("leela", []string{"age1leela"}); err != nil {
+		t.Fatalf("add machine: %v", err)
 	}
 	if err := file.AddGroup("work", []string{"leela"}); err != nil {
 		t.Fatalf("add group: %v", err)
@@ -81,8 +81,8 @@ groups:
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
-	if _, ok := reloaded.Host("leela"); !ok {
-		t.Error("the host was not written")
+	if _, ok := reloaded.Machine("leela"); !ok {
+		t.Error("the machine was not written")
 	}
 	if _, ok := reloaded.Group("work"); !ok {
 		t.Error("the group was not written")
@@ -94,8 +94,8 @@ groups:
 		t.Errorf("the recipients of work = %v, want [age1leela]", recipients)
 	}
 
-	if err := reloaded.RemoveHost("leela"); err != nil {
-		t.Fatalf("remove host: %v", err)
+	if err := reloaded.RemoveMachine("leela"); err != nil {
+		t.Fatalf("remove machine: %v", err)
 	}
 	if err := reloaded.RemoveGroup("work"); err != nil {
 		t.Fatalf("remove group: %v", err)
@@ -106,7 +106,7 @@ groups:
 
 	content := read(t, path)
 	if strings.Contains(content, "leela") {
-		t.Errorf("the host was not removed:\n%s", content)
+		t.Errorf("the machine was not removed:\n%s", content)
 	}
 }
 
@@ -115,7 +115,7 @@ groups:
 func TestRecipientsOf(t *testing.T) {
 	t.Parallel()
 
-	path := write(t, `hosts:
+	path := write(t, `machines:
   laura:
     age: [age1laura, age1laura2]
   leela:

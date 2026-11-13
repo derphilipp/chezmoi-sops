@@ -44,60 +44,60 @@ func (b *yamlBuffer) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// AddHost adds a machine with its age keys.
-func (f *File) AddHost(name string, keys []string) error {
-	if _, ok := f.Host(name); ok {
-		return fmt.Errorf("the host %q already exists", name)
+// AddMachine adds a machine with its age keys.
+func (f *File) AddMachine(name string, keys []string) error {
+	if _, ok := f.Machine(name); ok {
+		return fmt.Errorf("the machine %q already exists", name)
 	}
 
-	host := Host{Name: name, Age: keys}
-	f.Hosts = append(f.Hosts, host)
+	machine := Machine{Name: name, Age: keys}
+	f.Machines = append(f.Machines, machine)
 
-	mapping := f.section("hosts")
-	mapping.Content = append(mapping.Content, scalarNode(name), hostNode(host))
+	mapping := f.section("machines")
+	mapping.Content = append(mapping.Content, scalarNode(name), machineNode(machine))
 	return nil
 }
 
-// SetHostKeys replaces the age keys of a machine.
-func (f *File) SetHostKeys(name string, keys []string) error {
-	host, ok := f.Host(name)
+// SetMachineKeys replaces the age keys of a machine.
+func (f *File) SetMachineKeys(name string, keys []string) error {
+	machine, ok := f.Machine(name)
 	if !ok {
-		return fmt.Errorf("the host %q does not exist", name)
+		return fmt.Errorf("the machine %q does not exist", name)
 	}
 
-	host.Age = keys
-	for i := range f.Hosts {
-		if f.Hosts[i].Name == name {
-			f.Hosts[i] = host
+	machine.Age = keys
+	for i := range f.Machines {
+		if f.Machines[i].Name == name {
+			f.Machines[i] = machine
 		}
 	}
 
-	mapping := f.section("hosts")
+	mapping := f.section("machines")
 	for i := 0; i+1 < len(mapping.Content); i += 2 {
 		if mapping.Content[i].Value != name {
 			continue
 		}
-		mapping.Content[i+1] = hostNode(host)
+		mapping.Content[i+1] = machineNode(machine)
 		return nil
 	}
-	return fmt.Errorf("the host %q does not exist", name)
+	return fmt.Errorf("the machine %q does not exist", name)
 }
 
-// RemoveHost removes a machine.
-func (f *File) RemoveHost(name string) error {
-	if _, ok := f.Host(name); !ok {
-		return fmt.Errorf("the host %q does not exist", name)
+// RemoveMachine removes a machine.
+func (f *File) RemoveMachine(name string) error {
+	if _, ok := f.Machine(name); !ok {
+		return fmt.Errorf("the machine %q does not exist", name)
 	}
 
-	var hosts []Host
-	for _, host := range f.Hosts {
-		if host.Name != name {
-			hosts = append(hosts, host)
+	var machines []Machine
+	for _, machine := range f.Machines {
+		if machine.Name != name {
+			machines = append(machines, machine)
 		}
 	}
-	f.Hosts = hosts
+	f.Machines = machines
 
-	mapping := f.section("hosts")
+	mapping := f.section("machines")
 	mapping.Content = mappingDelete(mapping.Content, name)
 	return nil
 }
@@ -179,18 +179,18 @@ func scalarNode(value string) *yaml.Node {
 	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value}
 }
 
-// hostNode builds the node of a host.
-func hostNode(host Host) *yaml.Node {
+// machineNode builds the node of a machine.
+func machineNode(machine Machine) *yaml.Node {
 	node := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 
-	if host.Label != "" {
+	if machine.Label != "" {
 		node.Content = append(node.Content,
-			scalarNode("label"), scalarNode(host.Label))
+			scalarNode("label"), scalarNode(machine.Label))
 	}
 
-	if len(host.Hostnames) > 0 {
+	if len(machine.Hostnames) > 0 {
 		hostnames := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
-		for _, hostname := range host.Hostnames {
+		for _, hostname := range machine.Hostnames {
 			hostnames.Content = append(hostnames.Content, scalarNode(hostname))
 		}
 		node.Content = append(node.Content,
@@ -198,7 +198,7 @@ func hostNode(host Host) *yaml.Node {
 	}
 
 	age := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
-	for _, key := range host.Age {
+	for _, key := range machine.Age {
 		age.Content = append(age.Content, scalarNode(key))
 	}
 	node.Content = append(node.Content, scalarNode("age"), age)

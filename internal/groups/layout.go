@@ -15,11 +15,11 @@ const (
 	// GroupsDir holds the groups of secrets.
 	GroupsDir = "groups"
 
-	// HostsDir holds the secrets of the individual machines.
-	HostsDir = "hosts"
+	// MachinesDir holds the secrets of the individual machines.
+	MachinesDir = "machines"
 )
 
-// Group is a set of hosts that may read the same secrets.
+// Group is a set of machines that may read the same secrets.
 type Group struct {
 	// Name is the name of the group.
 	Name string
@@ -28,7 +28,7 @@ type Group struct {
 	// empty when the group has no files.
 	Dir string
 
-	// Members are the names of the hosts that may read the group.
+	// Members are the names of the machines that may read the group.
 	Members []string
 
 	// Recipients are the age public keys the group's payloads are
@@ -36,13 +36,13 @@ type Group struct {
 	Recipients []string
 }
 
-// Host is a machine that has its own secrets.
-type Host struct {
-	// Host is the host as it is written in the access file.
-	access.Host
+// Machine is a machine that has its own secrets.
+type Machine struct {
+	// Machine is the machine as it is written in the access file.
+	access.Machine
 
-	// Dir is the directory that holds the host's payload files. It is
-	// empty when the host has no files.
+	// Dir is the directory that holds the machine's payload files. It is
+	// empty when the machine has no files.
 	Dir string
 }
 
@@ -51,7 +51,7 @@ type Host struct {
 //	.secrets/
 //	  access.yaml
 //	  groups/<group>/<file>
-//	  hosts/<host>/<file>
+//	  machines/<machine>/<file>
 type Layout struct {
 	// Dir is the secrets directory.
 	Dir string
@@ -62,8 +62,8 @@ type Layout struct {
 	// Groups are the groups, in the order of the access file.
 	Groups []Group
 
-	// Hosts are the hosts, in the order of the access file.
-	Hosts []Host
+	// Machines are the machines, in the order of the access file.
+	Machines []Machine
 }
 
 // Discover reads the layout of the secrets directory.
@@ -80,15 +80,15 @@ func Discover(dir string) (Layout, error) {
 	}
 	layout.Access = file
 
-	for _, host := range file.Hosts {
-		resolved := Host{Host: host}
+	for _, machine := range file.Machines {
+		resolved := Machine{Machine: machine}
 
-		hostDir := filepath.Join(dir, HostsDir, host.Name)
-		if info, err := os.Stat(hostDir); err == nil && info.IsDir() {
-			resolved.Dir = hostDir
+		machineDir := filepath.Join(dir, MachinesDir, machine.Name)
+		if info, err := os.Stat(machineDir); err == nil && info.IsDir() {
+			resolved.Dir = machineDir
 		}
 
-		layout.Hosts = append(layout.Hosts, resolved)
+		layout.Machines = append(layout.Machines, resolved)
 	}
 
 	for _, group := range file.Groups {
@@ -98,11 +98,11 @@ func Discover(dir string) (Layout, error) {
 		}
 
 		for _, member := range group.Members {
-			host, ok := file.Host(member)
+			machine, ok := file.Machine(member)
 			if !ok {
-				return layout, fmt.Errorf("the group %q lists the unknown host %q", group.Name, member)
+				return layout, fmt.Errorf("the group %q lists the unknown machine %q", group.Name, member)
 			}
-			resolved.Recipients = append(resolved.Recipients, host.Age...)
+			resolved.Recipients = append(resolved.Recipients, machine.Age...)
 		}
 
 		groupDir := filepath.Join(dir, GroupsDir, group.Name)
@@ -122,7 +122,7 @@ func Discover(dir string) (Layout, error) {
 
 // checkForgotten reports the directories that are not in the access file.
 func (l Layout) checkForgotten(dir string) error {
-	for _, kind := range []string{HostsDir, GroupsDir} {
+	for _, kind := range []string{MachinesDir, GroupsDir} {
 		entries, err := os.ReadDir(filepath.Join(dir, kind))
 		if err != nil {
 			if os.IsNotExist(err) {
@@ -137,10 +137,10 @@ func (l Layout) checkForgotten(dir string) error {
 			}
 
 			switch kind {
-			case HostsDir:
-				if _, ok := l.Access.Host(entry.Name()); !ok {
+			case MachinesDir:
+				if _, ok := l.Access.Machine(entry.Name()); !ok {
 					return fmt.Errorf("the directory %s/%s has no entry in %s: "+
-						"every host needs a name and its keys. If the machine was "+
+						"every machine needs a name and its keys. If the machine was "+
 						"renamed, rename the directory as well",
 						kind, entry.Name(), access.FileName)
 				}
@@ -205,17 +205,16 @@ func FormatOf(path string) string {
 	}
 }
 
-// HostForHostname returns the host that is the machine with the given
-// hostname.
+// ForHostname returns the machine known by the given hostname.
 //
-// The hostnames of a host win. Without them the name is matched, first
+// The hostnames of a machine win. Without them the name is matched, first
 // exactly and then by prefix, which is the convention the recipient
 // registry used.
-func (l Layout) HostForHostname(hostname string) (Host, bool) {
-	for _, host := range l.Hosts {
-		if host.MatchesHostname(hostname) {
-			return host, true
+func (l Layout) ForHostname(hostname string) (Machine, bool) {
+	for _, machine := range l.Machines {
+		if machine.MatchesHostname(hostname) {
+			return machine, true
 		}
 	}
-	return Host{}, false
+	return Machine{}, false
 }

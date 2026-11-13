@@ -38,7 +38,7 @@ func completeMachines(cmd *cobra.Command, args []string, toComplete string) ([]s
 	}
 
 	var candidates []string
-	for _, machine := range environment.Layout.Hosts {
+	for _, machine := range environment.Layout.Machines {
 		candidates = append(candidates, machine.Name)
 	}
 
@@ -61,7 +61,7 @@ func completeGroupMachines(cmd *cobra.Command, args []string, toComplete string)
 	}
 
 	var candidates []string
-	for _, machine := range environment.Layout.Hosts {
+	for _, machine := range environment.Layout.Machines {
 		candidates = append(candidates, machine.Name)
 	}
 
@@ -83,7 +83,7 @@ func completeNewGroup(cmd *cobra.Command, args []string, toComplete string) ([]s
 	}
 
 	var candidates []string
-	for _, machine := range environment.Layout.Hosts {
+	for _, machine := range environment.Layout.Machines {
 		candidates = append(candidates, machine.Name)
 	}
 

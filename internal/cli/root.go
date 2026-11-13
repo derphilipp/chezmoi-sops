@@ -85,7 +85,7 @@ A group is a set of machines plus the secrets they share:
 
   .secrets/access.yaml                  the machines and the groups
   .secrets/groups/<group>/<file>        the secrets of a group
-  .secrets/hosts/<machine>/<file>       the secrets of one machine
+  .secrets/machines/<machine>/<file>    the secrets of one machine
 
 The recipients of a group are the age keys of its members, so a key is only
 ever written once. Because sops encrypts only the values, the key names stay

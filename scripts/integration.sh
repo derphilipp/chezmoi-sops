@@ -25,7 +25,7 @@ OTHER_RECIPIENT=$(age-keygen -y "$WORK/other.txt")
 
 # The access file: one machine, one group.
 cat > "$SOURCE/.secrets/access.yaml" <<EOF
-hosts:
+machines:
   testmachine:
     age:
       - $RECIPIENT

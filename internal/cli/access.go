@@ -18,7 +18,7 @@ func (e *env) accessPath() string {
 // never in a state the tool refuses to read.
 func (e *env) addGroup(name string, members []string) error {
 	for _, member := range members {
-		if _, ok := e.Layout.Access.Host(member); !ok {
+		if _, ok := e.Layout.Access.Machine(member); !ok {
 			return fmt.Errorf("the machine %q is not in %s", member, access.FileName)
 		}
 	}
@@ -43,7 +43,7 @@ func (e *env) addMachine(name string, keys []string) error {
 	if err != nil {
 		return err
 	}
-	if err := file.AddHost(name, keys); err != nil {
+	if err := file.AddMachine(name, keys); err != nil {
 		return err
 	}
 	return file.Save()
@@ -59,7 +59,7 @@ func (e *env) setMachineKeys(name string, keys []string) error {
 	if err != nil {
 		return err
 	}
-	if err := file.SetHostKeys(name, keys); err != nil {
+	if err := file.SetMachineKeys(name, keys); err != nil {
 		return err
 	}
 	return file.Save()
@@ -68,7 +68,7 @@ func (e *env) setMachineKeys(name string, keys []string) error {
 // setMembers replaces the members of a group.
 func (e *env) setMembers(name string, members []string) error {
 	for _, member := range members {
-		if _, ok := e.Layout.Access.Host(member); !ok {
+		if _, ok := e.Layout.Access.Machine(member); !ok {
 			return fmt.Errorf("the machine %q is not in %s", member, access.FileName)
 		}
 	}
@@ -83,7 +83,7 @@ func (e *env) setMembers(name string, members []string) error {
 	return file.Save()
 }
 
-// removeEntry removes a group or a host from the access file.
+// removeEntry removes a group or a machine from the access file.
 func (e *env) removeEntry(t target) error {
 	file, err := access.Load(e.accessPath())
 	if err != nil {
@@ -94,7 +94,7 @@ func (e *env) removeEntry(t target) error {
 	case kindGroup:
 		err = file.RemoveGroup(t.Name)
 	case kindMachine:
-		err = file.RemoveHost(t.Name)
+		err = file.RemoveMachine(t.Name)
 	default:
 		err = fmt.Errorf("unknown kind %q", t.Kind)
 	}

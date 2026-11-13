@@ -15,12 +15,12 @@ func newDataCmd() *cobra.Command {
 		Short: "Print the merged secrets for the chezmoi templates",
 		Long: `Print the merged secrets for the chezmoi templates.
 
-The groups are merged in the order of the access file, then the hosts. The
+The groups are merged in the order of the access file, then the machines. The
 first source that holds a value wins, and the conflict is reported.
 
 A group this machine cannot decrypt still contributes its shape: the key
 names with empty values. A template therefore never fails just because a
-secret is unavailable, it renders empty instead. The secrets of a host are
+secret is unavailable, it renders empty instead. The secrets of a machine are
 for that machine alone, so they contribute nothing to any other machine.
 
 The output is a JSON object:

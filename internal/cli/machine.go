@@ -56,7 +56,7 @@ func runMachineList(cmd *cobra.Command, args []string) error {
 
 	if jsonRequested(cmd) {
 		output := jsonOutput{Command: "machine list", OK: true}
-		for _, machine := range environment.Layout.Hosts {
+		for _, machine := range environment.Layout.Machines {
 			output.Machines = append(output.Machines, jsonMachine{
 				Machine: machine.Hostname(),
 				Key:     strings.Join(machine.Age, ", "),
@@ -68,7 +68,7 @@ func runMachineList(cmd *cobra.Command, args []string) error {
 
 	cmd.Println()
 	cmd.Println("Machines")
-	for _, machine := range environment.Layout.Hosts {
+	for _, machine := range environment.Layout.Machines {
 		readable := environment.groupsOfMachine(machine.Name)
 		cmd.Printf("  %-24s %s\n", machine.Hostname(), strings.Join(readable, ", "))
 		for _, key := range machine.Age {
@@ -109,7 +109,7 @@ func runMachineCreate(cmd *cobra.Command, args []string) error {
 	name := args[0]
 	keys := args[1:]
 
-	if _, ok := environment.Layout.Access.Host(name); ok {
+	if _, ok := environment.Layout.Access.Machine(name); ok {
 		return fail("The machine %q already exists.", name)
 	}
 
@@ -194,7 +194,7 @@ func runMachineKeys(cmd *cobra.Command, args []string) error {
 	name := args[0]
 	keys := args[1:]
 
-	machine, ok := environment.Layout.Access.Host(name)
+	machine, ok := environment.Layout.Access.Machine(name)
 	if !ok {
 		return fail("The machine %q does not exist.", name)
 	}

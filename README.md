@@ -79,18 +79,13 @@ The secrets live in a directory tree that carries the access control:
 .secrets/
   access.yaml                   the machines and the groups
   groups/<group>/<file>         readable by the members of the group
-  hosts/<machine>/<file>        readable by that machine alone
+  machines/<machine>/<file>     readable by that machine alone
 ```
-
-The directory is called `hosts`, and the same section of the access file is
-called `hosts`, because those names are on disk: renaming them would mean
-migrating every existing repository. The command line and the messages call
-them machines, because that is what they are.
 
 `access.yaml` is the only place the access control is written down:
 
 ```yaml
-hosts:
+machines:
   laura:
     age: [age1...]
   leela:

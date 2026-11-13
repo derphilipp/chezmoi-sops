@@ -84,18 +84,18 @@ func TestMergeShapeFillsTheGap(t *testing.T) {
 	}
 }
 
-// TestMergeHostShapeIsNotMerged checks that a host contributes nothing when
+// TestMergeMachineShapeIsNotMerged checks that a machine contributes nothing when
 // it cannot be decrypted.
 //
-// The secrets of a host are for that machine alone, so their names belong
+// The secrets of a machine are for that machine alone, so their names belong
 // to it alone too.
-func TestMergeHostShapeIsNotMerged(t *testing.T) {
+func TestMergeMachineShapeIsNotMerged(t *testing.T) {
 	t.Parallel()
 
 	result := groups.Merge([]groups.Source{
 		group("common", map[string]any{"TOKEN": "real"}),
 		{
-			Kind:             groups.KindHost,
+			Kind:             groups.KindMachine,
 			Name:             "laura",
 			Available:        false,
 			Reason:           groups.ReasonNotAuthorized,
@@ -105,7 +105,7 @@ func TestMergeHostShapeIsNotMerged(t *testing.T) {
 	})
 
 	if _, ok := result.Tree["PERSONAL"]; ok {
-		t.Errorf("the shape of a host should not be merged: %v", result.Tree)
+		t.Errorf("the shape of a machine should not be merged: %v", result.Tree)
 	}
 }
 

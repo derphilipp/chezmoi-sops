@@ -43,7 +43,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 				Recipients: group.Recipients,
 			})
 		}
-		for _, machine := range environment.Layout.Hosts {
+		for _, machine := range environment.Layout.Machines {
 			output.Machines = append(output.Machines, jsonMachine{
 				Machine: machine.Hostname(),
 				Key:     strings.Join(machine.Age, ", "),
@@ -101,7 +101,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 
 	cmd.Println()
 	cmd.Println("Machines")
-	for _, machine := range environment.Layout.Hosts {
+	for _, machine := range environment.Layout.Machines {
 		readable := environment.groupsOfMachine(machine.Name)
 		cmd.Printf("  %-24s %s\n", machine.Hostname(), strings.Join(readable, ", "))
 	}

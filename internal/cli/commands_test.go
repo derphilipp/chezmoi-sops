@@ -91,7 +91,7 @@ func testLayout(t *testing.T) string {
 		t.Fatal(err)
 	}
 
-	access := `hosts:
+	access := `machines:
   laura:
     age:
       - age1laura

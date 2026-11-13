@@ -8,13 +8,13 @@ import (
 	"github.com/derphilipp/chezmoi-sops/internal/groups"
 )
 
-// TestDiscover checks that the groups and the hosts are found, in the order
+// TestDiscover checks that the groups and the machines are found, in the order
 // of the access file.
 func TestDiscover(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	write(t, filepath.Join(dir, "access.yaml"), `hosts:
+	write(t, filepath.Join(dir, "access.yaml"), `machines:
   laura:
     age: [age1laura]
   leela:
@@ -28,7 +28,7 @@ groups:
 `)
 	write(t, filepath.Join(dir, "groups", "common", "tokens.sops.yaml"), "TOKEN: x\n")
 	write(t, filepath.Join(dir, "groups", "home", "tokens.sops.yaml"), "TOKEN: x\n")
-	write(t, filepath.Join(dir, "hosts", "laura", "personal.sops.yaml"), "X: y\n")
+	write(t, filepath.Join(dir, "machines", "laura", "personal.sops.yaml"), "X: y\n")
 
 	layout, err := groups.Discover(dir)
 	if err != nil {
@@ -42,23 +42,23 @@ groups:
 	if layout.Groups[0].Name != "common" || layout.Groups[1].Name != "home" {
 		t.Errorf("the groups are not in the order of the access file: %v", layout.Groups)
 	}
-	if len(layout.Hosts) != 2 {
-		t.Fatalf("hosts = %d, want 2", len(layout.Hosts))
+	if len(layout.Machines) != 2 {
+		t.Fatalf("machines = %d, want 2", len(layout.Machines))
 	}
-	if layout.Hosts[0].Name != "laura" {
-		t.Errorf("the hosts are not in the order of the access file: %v", layout.Hosts)
+	if layout.Machines[0].Name != "laura" {
+		t.Errorf("the machines are not in the order of the access file: %v", layout.Machines)
 	}
 }
 
 // TestDiscoverDerivesRecipients checks that the recipients of a group are
 // the keys of its members.
 //
-// The keys are never written twice: they are only in the hosts section.
+// The keys are never written twice: they are only in the machines section.
 func TestDiscoverDerivesRecipients(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	write(t, filepath.Join(dir, "access.yaml"), `hosts:
+	write(t, filepath.Join(dir, "access.yaml"), `machines:
   laura:
     age: [age1laura, age1laura2]
   leela:
@@ -95,15 +95,15 @@ func TestDiscoverRejectsADirectoryWithoutAnEntry(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	write(t, filepath.Join(dir, "access.yaml"), `hosts:
+	write(t, filepath.Join(dir, "access.yaml"), `machines:
   laura:
     age: [age1laura]
 groups:
   home:
     - laura
 `)
-	write(t, filepath.Join(dir, "hosts", "laura", "x.sops.yaml"), "A: b\n")
-	write(t, filepath.Join(dir, "hosts", "forgotten", "x.sops.yaml"), "A: b\n")
+	write(t, filepath.Join(dir, "machines", "laura", "x.sops.yaml"), "A: b\n")
+	write(t, filepath.Join(dir, "machines", "forgotten", "x.sops.yaml"), "A: b\n")
 
 	if _, err := groups.Discover(dir); err == nil {
 		t.Error("a directory without an entry should be an error")
@@ -111,12 +111,12 @@ groups:
 }
 
 // TestDiscoverRejectsAnUnknownMember checks that a group cannot list a
-// host that does not exist.
+// machine that does not exist.
 func TestDiscoverRejectsAnUnknownMember(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	write(t, filepath.Join(dir, "access.yaml"), `hosts:
+	write(t, filepath.Join(dir, "access.yaml"), `machines:
   laura:
     age: [age1laura]
 groups:
@@ -152,16 +152,16 @@ func TestPayloads(t *testing.T) {
 	}
 }
 
-// TestHostForHostname checks how a machine is matched to a host.
+// TestMachineForHostname checks how a machine is matched to a machine.
 //
 // The explicit hostnames win. Without them the name is matched, first
 // exactly and then by prefix, which is the convention the recipient
 // registry used.
-func TestHostForHostname(t *testing.T) {
+func TestMachineForHostname(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	write(t, filepath.Join(dir, "access.yaml"), `hosts:
+	write(t, filepath.Join(dir, "access.yaml"), `machines:
   laura:
     age: [age1laura]
   "SE-CND235268L / worklaptop":
@@ -177,26 +177,26 @@ func TestHostForHostname(t *testing.T) {
 	}
 
 	// An exact match.
-	host, ok := layout.HostForHostname("laura")
-	if !ok || host.Name != "laura" {
-		t.Errorf("laura = %v, %v", host.Name, ok)
+	machine, ok := layout.ForHostname("laura")
+	if !ok || machine.Name != "laura" {
+		t.Errorf("laura = %v, %v", machine.Name, ok)
 	}
 
 	// The prefix convention.
-	host, ok = layout.HostForHostname("SE-CND235268L")
-	if !ok || host.Name != "SE-CND235268L / worklaptop" {
-		t.Errorf("SE-CND235268L = %v, %v", host.Name, ok)
+	machine, ok = layout.ForHostname("SE-CND235268L")
+	if !ok || machine.Name != "SE-CND235268L / worklaptop" {
+		t.Errorf("SE-CND235268L = %v, %v", machine.Name, ok)
 	}
 
 	// An explicit hostname wins over the name.
-	host, ok = layout.HostForHostname("SE-CND12345")
-	if !ok || host.Name != "win" {
-		t.Errorf("SE-CND12345 = %v, %v", host.Name, ok)
+	machine, ok = layout.ForHostname("SE-CND12345")
+	if !ok || machine.Name != "win" {
+		t.Errorf("SE-CND12345 = %v, %v", machine.Name, ok)
 	}
 
 	// An unknown machine.
-	if _, ok := layout.HostForHostname("unknown"); ok {
-		t.Error("an unknown machine should not match a host")
+	if _, ok := layout.ForHostname("unknown"); ok {
+		t.Error("an unknown machine should not match a machine")
 	}
 }
 

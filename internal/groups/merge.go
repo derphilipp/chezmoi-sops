@@ -10,11 +10,11 @@ import (
 
 // Kinds of sources.
 const (
-	// KindGroup is a group of hosts that may read the same secrets.
+	// KindGroup is a group of machines that may read the same secrets.
 	KindGroup = "group"
 
-	// KindHost is a machine with its own secrets.
-	KindHost = "host"
+	// KindMachine is a machine with its own secrets.
+	KindMachine = "machine"
 )
 
 // Reasons for an unavailable source.
@@ -34,10 +34,10 @@ const (
 
 // Status describes what happened to one source.
 type Status struct {
-	// Kind is "group" or "host".
+	// Kind is "group" or "machine".
 	Kind string `json:"kind"`
 
-	// Name is the name of the group or the host.
+	// Name is the name of the group or the machine.
 	Name string `json:"name"`
 
 	// Available is true when the payload could be decrypted.
@@ -56,12 +56,12 @@ type Status struct {
 	Recipients []string `json:"recipients"`
 }
 
-// Source is one source of secrets: a group or a host.
+// Source is one source of secrets: a group or a machine.
 type Source struct {
-	// Kind is "group" or "host".
+	// Kind is "group" or "machine".
 	Kind string
 
-	// Name is the name of the group or the host.
+	// Name is the name of the group or the machine.
 	Name string
 
 	// Files are the payload files of the source, in merge order.
@@ -89,7 +89,7 @@ type Source struct {
 	// when the source cannot be decrypted.
 	//
 	// A group does: a machine that cannot read a group still renders the
-	// templates with empty values. A host does not: its secrets are for
+	// templates with empty values. A machine does not: its secrets are for
 	// that machine alone, so their names belong to it alone too.
 	ContributesShape bool
 }
@@ -125,7 +125,7 @@ type Result struct {
 //     and the conflict is reported.
 //
 // The sources are expected in merge order: the groups in the order of the
-// access file, then the hosts in the order of the access file.
+// access file, then the machines in the order of the access file.
 func Merge(sources []Source) *Result {
 	result := &Result{
 		Tree:        map[string]any{},

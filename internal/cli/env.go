@@ -68,7 +68,7 @@ func resolve() (*env, error) {
 }
 
 // sources builds the merge sources: the groups in the order of the access
-// file, then the hosts in the order of the access file.
+// file, then the machines in the order of the access file.
 //
 // The order decides which value wins when two of them hold the same key.
 func (e *env) sources() []groups.Source {
@@ -78,8 +78,8 @@ func (e *env) sources() []groups.Source {
 		sources = append(sources, e.source(groups.KindGroup, group.Name, group.Dir, group.Recipients, true))
 	}
 
-	for _, host := range e.Layout.Hosts {
-		sources = append(sources, e.source(groups.KindHost, host.Name, host.Dir, host.Age, false))
+	for _, machine := range e.Layout.Machines {
+		sources = append(sources, e.source(groups.KindMachine, machine.Name, machine.Dir, machine.Age, false))
 	}
 
 	return sources

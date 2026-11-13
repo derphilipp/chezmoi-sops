@@ -15,7 +15,7 @@ import (
 
 // The kinds of things the secrets belong to.
 //
-// The machines are called hosts in the access file and in the layout: that
+// The machines are called machines in the access file and in the layout: that
 // is where the names live. The command line and the messages call them
 // machines, because that is what they are.
 const (
@@ -56,7 +56,7 @@ func (e *env) targetDir(t target) (string, []string, error) {
 		}
 		return "", nil, fmt.Errorf("The group %q does not exist.", t.Name)
 	case kindMachine:
-		for _, machine := range e.Layout.Hosts {
+		for _, machine := range e.Layout.Machines {
 			if machine.Name == t.Name {
 				return machine.Dir, machine.Age, nil
 			}
@@ -71,7 +71,7 @@ func (e *env) targetDir(t target) (string, []string, error) {
 // a machine.
 func (e *env) secretsDirOf(kind string) string {
 	if kind == kindMachine {
-		return groups.HostsDir
+		return groups.MachinesDir
 	}
 	return groups.GroupsDir
 }
@@ -279,15 +279,15 @@ func renameTarget(cmd *cobra.Command, kind, from, to string) error {
 			return fail("%s", err)
 		}
 	case kindMachine:
-		if _, ok := file.Host(from); !ok {
+		if _, ok := file.Machine(from); !ok {
 			return fail("The machine %q does not exist.", from)
 		}
-		if _, ok := file.Host(to); ok {
+		if _, ok := file.Machine(to); ok {
 			return fail("The machine %q already exists.", to)
 		}
-		machine, _ := file.Host(from)
-		file.RemoveHost(from)
-		if err := file.AddHost(to, machine.Age); err != nil {
+		machine, _ := file.Machine(from)
+		file.RemoveMachine(from)
+		if err := file.AddMachine(to, machine.Age); err != nil {
 			return fail("%s", err)
 		}
 		// The groups the machine was in keep it.
