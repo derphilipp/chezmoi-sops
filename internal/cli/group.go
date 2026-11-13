@@ -248,7 +248,7 @@ func runGroupAdd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	return setMembers(cmd, environment, name, members)
+	return setMembers(cmd, environment, "group add", name, members)
 }
 
 func newGroupRemoveCmd() *cobra.Command {
@@ -300,7 +300,7 @@ func runGroupRemove(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	return setMembers(cmd, environment, name, members)
+	return setMembers(cmd, environment, "group remove", name, members)
 }
 
 func newGroupMembersCmd() *cobra.Command {
@@ -390,7 +390,10 @@ func runGroupDelete(cmd *cobra.Command, args []string) error {
 
 // setMembers writes the members of a group to the access file and encrypts
 // its payloads again for them.
-func setMembers(cmd *cobra.Command, environment *env, name string, members []string) error {
+//
+// The command is the name of the command that calls it, for the
+// machine-readable output.
+func setMembers(cmd *cobra.Command, environment *env, command, name string, members []string) error {
 	noReencrypt, _ := cmd.Flags().GetBool("no-reencrypt")
 
 	if err := environment.setMembers(name, members); err != nil {
@@ -416,7 +419,7 @@ func setMembers(cmd *cobra.Command, environment *env, name string, members []str
 
 	if jsonRequested(cmd) {
 		return printJSON(cmd, jsonOutput{
-			Command: "group members",
+			Command: command,
 			OK:      true,
 			Message: fmt.Sprintf("The group %q is now read by %s.", name, strings.Join(members, ", ")),
 		})
